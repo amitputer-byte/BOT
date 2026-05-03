@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shipments Map — Solargik</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117;
+      color: #e1e4e8;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: 340px;
+      min-width: 340px;
+      background: #161b22;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #30363d;
+      z-index: 1000;
+    }
+
+    #sidebar-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid #30363d;
+      background: #1c2128;
+    }
+
+    #sidebar-header h1 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 3px;
+    }
+
+    #sidebar-header .board-link {
+      font-size: 11px;
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    #sidebar-header .board-link:hover { text-decoration: underline; }
+
+    /* ── STATS ── */
+    #stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 10px;
+      background: #1c2128;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .stat-card {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 9px 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .stat-card:hover { border-color: #58a6ff55; }
+    .stat-card.active { border-color: #58a6ff; background: #0d2044; }
+
+    .stat-value {
+      display: block;
+      font-size: 22px;
+      font-weight: 700;
+      color: #f0f6fc;
+      line-height: 1.2;
+    }
+    .stat-label {
+      display: block;
+      font-size: 10px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-top: 1px;
+    }
+
+    /* ── FILTERS ── */
+    #filters {
+      padding: 8px 10px;
+      border-bottom: 1px solid #30363d;
+    }
+
+    #search {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #e1e4e8;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+    #search:focus { outline: none; border-color: #58a6ff; }
+    #search::placeholder { color: #484f58; }
+
+    #status-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      max-height: 80px;
+      overflow-y: auto;
+    }
+    #status-chips::-webkit-scrollbar { width: 3px; }
+    #status-chips::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .filter-chip.selected { opacity: 1; }
+    .filter-chip:not(.selected) { opacity: 0.35; }
+    .filter-chip:hover { opacity: 0.85; }
+
+    .chip-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── LIST ── */
+    #list-header {
+      padding: 6px 10px;
+      font-size: 10px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      border-bottom: 1px solid #30363d;
+      background: #161b22;
+      flex-shrink: 0;
+    }
+
+    #shipment-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    #shipment-list::-webkit-scrollbar { width: 4px; }
+    #shipment-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+    .ship-card {
+      padding: 9px 10px;
+      border-bottom: 1px solid #21262d;
+      cursor: pointer;
+      transition: background 0.12s;
+      border-left: 3px solid transparent;
+    }
+    .ship-card:hover { background: #1c2128; }
+    .ship-card.highlighted { background: #1a2332; border-left-color: #58a6ff; }
+
+    .card-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #f0f6fc;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+      margin-top: 2px;
+    }
+
+    .badge-status {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      color: #fff;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .badge-method {
+      font-size: 10px;
+      color: #8b949e;
+      background: #21262d;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    .card-loc { font-size: 11px; color: #8b949e; }
+    .card-eta { font-size: 10px; color: #6e7681; }
+
+    #no-results {
+      padding: 24px 16px;
+      text-align: center;
+      color: #484f58;
+      font-size: 13px;
+    }
+
+    /* ── MAP ── */
+    #map-area {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #map { width: 100%; height: 100%; }
+
+    /* ── TOOLBAR (top-right overlay) ── */
+    #toolbar {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 1000;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .tb-box {
+      background: rgba(22, 27, 34, 0.92);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 11px;
+      color: #8b949e;
+      backdrop-filter: blur(6px);
+    }
+
+    #refresh-btn {
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 5px 12px;
+      color: #e1e4e8;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    #refresh-btn:hover { background: #30363d; border-color: #58a6ff; }
+    #refresh-btn.loading { opacity: 0.55; pointer-events: none; }
+
+    /* ── LEGEND ── */
+    #legend {
+      position: absolute;
+      bottom: 28px;
+      right: 10px;
+      z-index: 1000;
+      background: rgba(22, 27, 34, 0.92);
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 10px 12px;
+      backdrop-filter: blur(6px);
+      min-width: 150px;
+    }
+
+    #legend h4 {
+      font-size: 10px;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 7px;
+    }
+
+    .leg-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      color: #c9d1d9;
+      margin-bottom: 5px;
+    }
+
+    .leg-line {
+      width: 22px;
+      height: 0;
+      border-top-width: 2px;
+      border-top-style: solid;
+      flex-shrink: 0;
+    }
+
+    .leg-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.5);
+      flex-shrink: 0;
+    }
+
+    /* ── LOADING ── */
+    #loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(13, 17, 23, 0.88);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      backdrop-filter: blur(4px);
+    }
+    #loading-overlay.hidden { display: none; }
+
+    .spinner {
+      width: 38px;
+      height: 38px;
+      border: 3px solid #30363d;
+      border-top-color: #58a6ff;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-text { font-size: 13px; color: #8b949e; }
+
+    /* ── ERROR ── */
+    #error-box {
+      margin: 10px;
+      background: #2d0f0f;
+      border: 1px solid #6f1919;
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: #ffa0a0;
+      display: none;
+    }
+
+    /* ── LEAFLET POPUP ── */
+    .leaflet-popup-content-wrapper {
+      background: #161b22 !important;
+      border: 1px solid #30363d !important;
+      border-radius: 8px !important;
+      color: #e1e4e8 !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+    }
+    .leaflet-popup-tip { background: #161b22 !important; }
+    .leaflet-popup-content { margin: 12px 14px !important; }
+
+    .pop-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 8px;
+      word-break: break-word;
+    }
+    .pop-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 11px;
+      align-items: flex-start;
+    }
+    .pop-lbl { color: #8b949e; min-width: 78px; flex-shrink: 0; }
+    .pop-val { color: #e1e4e8; word-break: break-word; }
+    .pop-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .pop-link {
+      display: block;
+      margin-top: 10px;
+      font-size: 11px;
+      color: #58a6ff;
+      text-decoration: none;
+      text-align: right;
+    }
+    .pop-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ SIDEBAR ═══════════════════════════ -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>🗺️ Solargik — Shipments Map</h1>
+    <a class="board-link"
+       href="https://solargikcrm.monday.com/boards/6652155567"
+       target="_blank">Open in monday.com ↗</a>
+  </div>
+
+  <div id="stats">
+    <div class="stat-card active" id="stat-all" onclick="setStatGroup('all')">
+      <span class="stat-value" id="v-total">—</span>
+      <span class="stat-label">Total</span>
+    </div>
+    <div class="stat-card" id="stat-active" onclick="setStatGroup('active')">
+      <span class="stat-value" id="v-active">—</span>
+      <span class="stat-label">Active</span>
+    </div>
+    <div class="stat-card" id="stat-arrived" onclick="setStatGroup('arrived')">
+      <span class="stat-value" id="v-arrived">—</span>
+      <span class="stat-label">Arrived</span>
+    </div>
+    <div class="stat-card" id="stat-stuck" onclick="setStatGroup('stuck')">
+      <span class="stat-value" id="v-stuck">—</span>
+      <span class="stat-label">Stuck</span>
+    </div>
+  </div>
+
+  <div id="filters">
+    <input id="search" type="text" placeholder="🔍 Search shipment, port, container…"
+           oninput="applyFilters()">
+    <div id="status-chips"></div>
+  </div>
+
+  <div id="list-header">
+    Shipments — <span id="visible-count">0</span> shown
+  </div>
+
+  <div id="error-box"></div>
+
+  <div id="shipment-list">
+    <div id="no-results" style="display:none">No shipments match the filters</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ MAP AREA ═══════════════════════════ -->
+<div id="map-area">
+
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-text">Connecting to monday.com…</div>
+  </div>
+
+  <div id="toolbar">
+    <div class="tb-box" id="update-info">Loading…</div>
+    <div class="tb-box" id="countdown-box" style="display:none"></div>
+    <button id="refresh-btn" onclick="loadData(true)">⟳ Refresh</button>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="legend">
+    <h4>Routes</h4>
+    <div class="leg-item">
+      <div class="leg-line" style="border-top-color:#4a7fd4;"></div>
+      <span>Sea</span>
+    </div>
+    <div class="leg-item">
+      <div class="leg-line" style="border-top-color:#9d50dd;border-top-style:dashed;"></div>
+      <span>Air</span>
+    </div>
+    <div class="leg-item">
+      <div class="leg-line" style="border-top-color:#fdab3d;border-top-style:dotted;"></div>
+      <span>Land / Truck</span>
+    </div>
+    <h4 style="margin-top:8px;">Status</h4>
+    <div class="leg-item">
+      <div class="leg-dot" style="background:#225091;"></div>
+      <span>On the Way</span>
+    </div>
+    <div class="leg-item">
+      <div class="leg-dot" style="background:#00c875;"></div>
+      <span>Arrived</span>
+    </div>
+    <div class="leg-item">
+      <div class="leg-dot" style="background:#df2f4a;"></div>
+      <span>Stuck</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// COORDINATE TABLES
+// ══════════════════════════════════════════════════════════════════
+const PORT_COORDS = {
+  'Port of Trieste':        [45.647,  13.776],
+  'Trieste':                [45.647,  13.776],
+  'Naples':                 [40.840,  14.264],
+  'Sines':                  [37.956,  -8.869],
+  'Marseille':              [43.296,   5.381],
+  'Salerno':                [40.678,  14.768],
+  'Salerno port':           [40.678,  14.768],
+  'Salerno Port':           [40.678,  14.768],
+  'Salerno port':           [40.678,  14.768],
+  'Genoa':                  [44.411,   8.932],
+  'Genova':                 [44.411,   8.932],
+  'Ravena':                 [44.416,  12.200],
+  'Ravenna':                [44.416,  12.200],
+  'Gioia Tauro':            [38.424,  16.003],
+  'Bari':                   [41.114,  16.871],
+  'Cagliari':               [39.227,   9.120],
+  'Ancona':                 [43.617,  13.516],
+  'Ben Gurion (Air Port)':  [31.996,  34.893],
+  'New York':               [40.679, -74.044],
+  'Antwerp':                [51.229,   4.402],
+  'Shanghai':               [31.230, 121.473],
+  'Civitavecchia':          [42.094,  11.797],
+  'Ashdod':                 [31.798,  34.648],
+  'Lisbon':                 [38.716,  -9.142],
+  'Port of Lisbon':         [38.716,  -9.142],
+  'Suape Port':             [-8.388, -34.973],
+  'Palermo':                [38.114,  13.364],
+  'Port of Charleston':     [32.778, -79.934],
+  'Los Angeles':            [33.729,-118.262],
+  'Long Beach':             [33.754,-118.216],
+  'NHAVA SHEVA':            [18.951,  72.954],
+  'Nahva Sheva':            [18.951,  72.954],
+  'Nahva Sheva (':          [18.951,  72.954],
+  'FOS SUR MER':            [43.433,   4.867],
+  'LIVORNO':                [43.548,  10.311],
+  'Livorno':                [43.548,  10.311],
+  'LEIXOES':                [41.185,  -8.703],
+  'Cape town':             [-33.924,  18.424],
+  'Cape Town Port':        [-33.924,  18.424],
+  'SAN FRANCISCO,':         [37.795,-122.393],
+  'BUDAPEST':               [47.498,  19.040],
+  'ROME':                   [41.890,  12.492],
+  'MILAN':                  [45.464,   9.190],
+  'MUMBAI':                 [18.922,  72.835],
+  'Mumbai':                 [18.922,  72.835],
+  'Porto Marghera (Venice)':[45.461,  12.246],
+  'Salvador':              [-12.971, -38.512],
+  'Fus Sur Mar':            [43.433,   4.867],
+};
+
+const COUNTRY_COORDS = {
+  'Italy':         [41.870,  12.567],
+  'Hungary':       [47.163,  19.503],
+  'United States': [37.090, -95.713],
+  'Brazil':       [-14.235, -51.926],
+  'Israel':        [31.047,  34.852],
+  'Portugal':      [39.399,  -8.224],
+  'France':        [46.228,   2.213],
+  'India':         [20.594,  78.963],
+  'China':         [35.862, 104.195],
+  'South Africa': [-30.559,  22.938],
+  'Germany':       [51.166,  10.452],
+  'Belgium':       [50.503,   4.470],
+  'Spain':         [40.463,  -3.749],
+  'Greece':        [39.075,  21.825],
+  'Turkey':        [38.963,  35.243],
+  'Netherlands':   [52.133,   5.291],
+  'Australia':    [-25.274, 133.775],
+  'Japan':         [36.205, 138.253],
+  'South Korea':   [35.908, 127.767],
+  'Canada':        [56.130,-106.347],
+  'Mexico':        [23.634,-102.553],
+  'Colombia':       [4.571, -74.298],
+  'Morocco':       [31.792,  -7.093],
+  'Egypt':         [26.820,  30.802],
+  'Jordan':        [30.586,  36.238],
+};
+
+const ORIGIN_COORDS = {
+  'CHINA':    [31.230, 121.473],
+  'ISRAEL':   [32.794,  34.990],
+  'INDIA':    [18.951,  72.954],
+  'ITALY':    [44.411,   8.932],
+  'USA':      [37.090, -95.713],
+  'PORTUGAL': [37.956,  -8.869],
+  'GERMANY':  [53.550,   9.992],
+};
+const DEFAULT_ORIGIN = [31.798, 34.648]; // Ashdod
+
+// ══════════════════════════════════════════════════════════════════
+// STATUS CONFIG
+// ══════════════════════════════════════════════════════════════════
+const STATUS_CFG = {
+  'On the Way (Sea)':             { color: '#225091', group: 'active' },
+  'On the Way (Air)':             { color: '#9d50dd', group: 'active' },
+  'On the Way (Land)':            { color: '#757575', group: 'active' },
+  'Arrived to Destination port':  { color: '#ffcb00', group: 'arrived' },
+  'Arrive waiting for POD':       { color: '#4eccc6', group: 'arrived' },
+  'Delivery date confirmed':      { color: '#fdab3d', group: 'active' },
+  'Out for Delivery':             { color: '#007eb5', group: 'active' },
+  'Awaiting Document Completion': { color: '#037f4c', group: 'active' },
+  'Pending Coordination':         { color: '#cab641', group: 'active' },
+  'Customs (Italy)':              { color: '#9cd326', group: 'active' },
+  'Production / Packaging':       { color: '#bb3354', group: 'active' },
+  'SO Issued':                    { color: '#9d50dd', group: 'active' },
+  'Ready to Pick Up':             { color: '#66ccff', group: 'active' },
+  'Awaiting payment':             { color: '#74afcc', group: 'active' },
+  'SOLARGIK ISRAEL':              { color: '#faa1f1', group: 'arrived' },
+  'SOLARGIK ITALY':               { color: '#7e3b8a', group: 'arrived' },
+  'Arrive':                       { color: '#00c875', group: 'arrived' },
+  'Done':                         { color: '#00c875', group: 'arrived' },
+  'DONE':                         { color: '#7f5347', group: 'arrived' },
+  'In inventory':                 { color: '#ff6d3b', group: 'arrived' },
+  'In WH-Clients area':           { color: '#ff7575', group: 'arrived' },
+  'Arrived-Warehouse':            { color: '#555',    group: 'arrived' },
+  'Stuck':                        { color: '#df2f4a', group: 'stuck'   },
+};
+
+function statusCfg(s)    { return STATUS_CFG[s] || { color: '#484f58', group: 'other' }; }
+function statusColor(s)  { return statusCfg(s).color; }
+function statusGroup(s)  { return statusCfg(s).group; }
+
+function routeStyle(method) {
+  if (!method) return { color: '#444', dash: null };
+  const m = method.toLowerCase();
+  if (m.includes('air') || m.includes('fedex') || m.includes('dhl') || m.includes('envelope'))
+    return { color: '#9d50dd', dash: '8 5' };
+  if (m.includes('truck') || m.includes('track') || m.includes('self') || m.includes('pickup'))
+    return { color: '#fdab3d', dash: '4 4' };
+  return { color: '#4a7fd4', dash: null }; // sea (default)
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAP
+// ══════════════════════════════════════════════════════════════════
+const map = L.map('map', { center: [30, 20], zoom: 3, zoomControl: true });
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 19,
+}).addTo(map);
+
+const routeLayer  = L.layerGroup().addTo(map);
+const markerLayer = L.layerGroup().addTo(map);
+
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
+let allShipments      = [];
+let filteredShipments = [];
+let activeGroup       = 'all';
+let activeStatuses    = new Set();
+let markerMap         = {};    // id -> L.marker
+let refreshInterval   = null;
+let countdownVal      = 0;
+
+// ══════════════════════════════════════════════════════════════════
+// COORD HELPERS
+// ══════════════════════════════════════════════════════════════════
+function destCoords(s) {
+  if (s.port) {
+    const c = lookupPort(s.port);
+    if (c) return c;
+  }
+  if (s.country && COUNTRY_COORDS[s.country]) return COUNTRY_COORDS[s.country];
+  return null;
+}
+
+function originCoords(s) {
+  const raw = (s.originCountry || '').toUpperCase().trim().replace(/[^A-Z]/g, '');
+  if (raw && ORIGIN_COORDS[raw]) return ORIGIN_COORDS[raw];
+  if (s.countryOfOrigin && COUNTRY_COORDS[s.countryOfOrigin]) return COUNTRY_COORDS[s.countryOfOrigin];
+  return DEFAULT_ORIGIN;
+}
+
+function lookupPort(name) {
+  if (!name) return null;
+  if (PORT_COORDS[name] !== undefined) return PORT_COORDS[name];
+  const lo = name.toLowerCase();
+  for (const [k, v] of Object.entries(PORT_COORDS))
+    if (k.toLowerCase() === lo) return v;
+  return null;
+}
+
+function bezier(from, to, steps = 40) {
+  const [lat1, lng1] = from;
+  const [lat2, lng2] = to;
+  const mLat = (lat1 + lat2) / 2 - (lng2 - lng1) * 0.22;
+  const mLng = (lng1 + lng2) / 2 + (lat2 - lat1) * 0.22;
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    pts.push([
+      (1-t)*(1-t)*lat1 + 2*(1-t)*t*mLat + t*t*lat2,
+      (1-t)*(1-t)*lng1 + 2*(1-t)*t*mLng + t*t*lng2,
+    ]);
+  }
+  return pts;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MARKERS
+// ══════════════════════════════════════════════════════════════════
+function makeIcon(color, size = 14) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:${size}px;height:${size}px;
+      background:${color};
+      border:2px solid rgba(255,255,255,0.75);
+      border-radius:50%;
+      box-shadow:0 2px 8px rgba(0,0,0,0.55);
+    "></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// POPUP
+// ══════════════════════════════════════════════════════════════════
+function popup(s) {
+  const color = statusColor(s.status);
+  function row(lbl, val) {
+    return val ? `<div class="pop-row"><span class="pop-lbl">${lbl}</span><span class="pop-val">${val}</span></div>` : '';
+  }
+  let timeline = '';
+  if (s.timeline) {
+    const p = s.timeline.split(' - ');
+    timeline = p.length === 2 ? `ETD: ${p[0]} → ETA: ${p[1]}` : s.timeline;
+  }
+  const dest = [s.port, s.country].filter(Boolean).join(', ') || '—';
+  const orig = s.originCountry || s.countryOfOrigin || 'Israel';
+
+  return `<div style="min-width:220px;max-width:280px;">
+    <div class="pop-title">${s.name}</div>
+    ${s.status ? `<div style="margin-bottom:8px"><span class="pop-badge" style="background:${color}">${s.status}</span></div>` : ''}
+    ${row('Shipping', s.shippingMethod)}
+    ${row('Origin', orig)}
+    ${row('Destination', dest)}
+    ${timeline ? `<div class="pop-row"><span class="pop-lbl">Timeline</span><span class="pop-val">${timeline}</span></div>` : ''}
+    ${row('Arrival', s.arrivalDate)}
+    ${row('Container', s.containerNumber)}
+    ${row('File No.', s.fileNumber)}
+    ${row('Shipper', s.shipper)}
+    ${row('Location', s.currentLocation)}
+    ${row('Group', s.group)}
+    <a class="pop-link" href="${s.url}" target="_blank">Open in monday.com ↗</a>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER MAP
+// ══════════════════════════════════════════════════════════════════
+function renderMap() {
+  routeLayer.clearLayers();
+  markerLayer.clearLayers();
+  markerMap = {};
+
+  const arrived = s => statusGroup(s.status) === 'arrived';
+
+  // Routes (draw below markers — only for active/in-transit)
+  filteredShipments.forEach(s => {
+    if (arrived(s)) return;
+    const dest = destCoords(s);
+    if (!dest) return;
+    const orig = originCoords(s);
+    const style = routeStyle(s.shippingMethod);
+    L.polyline(bezier(orig, dest), {
+      color: style.color,
+      weight: 1.8,
+      opacity: 0.55,
+      dashArray: style.dash,
+    }).addTo(routeLayer);
+  });
+
+  // Markers
+  filteredShipments.forEach(s => {
+    const dest = destCoords(s);
+    if (!dest) return;
+    const color = statusColor(s.status);
+    const size  = arrived(s) ? 10 : 14;
+    const m = L.marker(dest, {
+      icon: makeIcon(color, size),
+      zIndexOffset: arrived(s) ? 0 : 500,
+    });
+    m.bindPopup(popup(s), { maxWidth: 300 });
+    m.on('click', () => highlightCard(s.id));
+    m.addTo(markerLayer);
+    markerMap[s.id] = m;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RENDER SIDEBAR LIST
+// ══════════════════════════════════════════════════════════════════
+function renderList() {
+  const list = document.getElementById('shipment-list');
+  list.querySelectorAll('.ship-card').forEach(el => el.remove());
+
+  document.getElementById('visible-count').textContent = filteredShipments.length;
+  document.getElementById('no-results').style.display =
+    filteredShipments.length ? 'none' : 'block';
+
+  filteredShipments.forEach(s => {
+    const color = statusColor(s.status);
+    const dest  = [s.port, s.country].filter(Boolean).join(', ') || '—';
+    let eta = '';
+    if (s.timeline) {
+      const p = s.timeline.split(' - ');
+      if (p.length === 2) eta = `ETA: ${p[1]}`;
+    } else if (s.arrivalDate) {
+      eta = `Arrived: ${s.arrivalDate}`;
+    }
+
+    const card = document.createElement('div');
+    card.className = 'ship-card';
+    card.dataset.id = s.id;
+    card.innerHTML = `
+      <div class="card-name" title="${s.name}">${s.name}</div>
+      <div class="card-row">
+        ${s.status ? `<span class="badge-status" style="background:${color}">${s.status}</span>` : ''}
+        <span class="card-loc">${dest}</span>
+      </div>
+      <div class="card-row">
+        ${s.shippingMethod ? `<span class="badge-method">${s.shippingMethod}</span>` : ''}
+        ${eta ? `<span class="card-eta">${eta}</span>` : ''}
+      </div>`;
+
+    card.addEventListener('click', () => {
+      const coords = destCoords(s);
+      if (coords) {
+        map.setView(coords, Math.max(map.getZoom(), 5), { animate: true });
+        markerMap[s.id]?.openPopup();
+      }
+      highlightCard(s.id);
+    });
+
+    list.appendChild(card);
+  });
+}
+
+function highlightCard(id) {
+  document.querySelectorAll('.ship-card').forEach(el =>
+    el.classList.toggle('highlighted', el.dataset.id === String(id)));
+  document.querySelector(`.ship-card[data-id="${id}"]`)
+    ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// STATS
+// ══════════════════════════════════════════════════════════════════
+function updateStats() {
+  document.getElementById('v-total').textContent   = allShipments.length;
+  document.getElementById('v-active').textContent  = allShipments.filter(s => statusGroup(s.status) === 'active').length;
+  document.getElementById('v-arrived').textContent = allShipments.filter(s => statusGroup(s.status) === 'arrived').length;
+  document.getElementById('v-stuck').textContent   = allShipments.filter(s => s.status === 'Stuck').length;
+}
+
+function setStatGroup(g) {
+  activeGroup = g;
+  document.querySelectorAll('.stat-card').forEach(el => el.classList.remove('active'));
+  document.getElementById(`stat-${g}`).classList.add('active');
+  applyFilters();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// STATUS CHIPS
+// ══════════════════════════════════════════════════════════════════
+function buildChips() {
+  const statuses = [...new Set(allShipments.map(s => s.status).filter(Boolean))].sort();
+  activeStatuses = new Set(statuses);
+  const container = document.getElementById('status-chips');
+  container.innerHTML = '';
+  statuses.forEach(st => {
+    const color = statusColor(st);
+    const chip = document.createElement('span');
+    chip.className = 'filter-chip selected';
+    chip.style.cssText = `background:${color}22;border-color:${color}66;color:${color};`;
+    chip.innerHTML = `<span class="chip-dot" style="background:${color}"></span>${st}`;
+    chip.addEventListener('click', () => {
+      if (activeStatuses.has(st)) { activeStatuses.delete(st); chip.classList.remove('selected'); }
+      else                        { activeStatuses.add(st);    chip.classList.add('selected'); }
+      applyFilters();
+    });
+    container.appendChild(chip);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FILTERS
+// ══════════════════════════════════════════════════════════════════
+function applyFilters() {
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  filteredShipments = allShipments.filter(s => {
+    if (activeGroup === 'active'  && statusGroup(s.status) !== 'active')  return false;
+    if (activeGroup === 'arrived' && statusGroup(s.status) !== 'arrived') return false;
+    if (activeGroup === 'stuck'   && s.status !== 'Stuck')                return false;
+    if (s.status && !activeStatuses.has(s.status))                        return false;
+    if (q) {
+      const hay = [s.name, s.status, s.country, s.port, s.shippingMethod,
+                   s.group, s.containerNumber, s.fileNumber, s.currentLocation]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  renderMap();
+  renderList();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// COUNTDOWN
+// ══════════════════════════════════════════════════════════════════
+function startCountdown() {
+  clearInterval(refreshInterval);
+  countdownVal = 60;
+  const box = document.getElementById('countdown-box');
+  box.style.display = 'block';
+  refreshInterval = setInterval(() => {
+    countdownVal--;
+    box.textContent = `Auto-refresh in ${countdownVal}s`;
+    if (countdownVal <= 0) loadData(true);
+  }, 1000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOAD DATA
+// ══════════════════════════════════════════════════════════════════
+async function loadData(force = false) {
+  const btn = document.getElementById('refresh-btn');
+  btn.classList.add('loading');
+  btn.textContent = '⟳ Loading…';
+
+  const overlay = document.getElementById('loading-overlay');
+  if (!allShipments.length) overlay.classList.remove('hidden');
+
+  try {
+    const resp = await fetch(force ? '/api/shipments?refresh=1' : '/api/shipments');
+    const data = await resp.json();
+
+    if (data.error) { showError(data.error); return; }
+
+    allShipments = data.shipments;
+    hideError();
+    updateStats();
+    buildChips();
+    applyFilters();
+
+    const t = new Date(data.fetchedAt);
+    document.getElementById('update-info').textContent =
+      `${data.total} shipments · ${t.toLocaleTimeString()}`;
+
+    startCountdown();
+  } catch (err) {
+    showError('Cannot reach server: ' + err.message);
+  } finally {
+    btn.classList.remove('loading');
+    btn.textContent = '⟳ Refresh';
+    overlay.classList.add('hidden');
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-box');
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+function hideError() {
+  document.getElementById('error-box').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
+loadData();
+</script>
+</body>
+</html>
