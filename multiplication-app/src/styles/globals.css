@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: #FFD93D;
+  --color-primary-dark: #FFB800;
+  --color-secondary: #4ECDC4;
+  --color-accent: #FF6B9D;
+  --color-success: #6BCB77;
+  --color-error: #FF8A8A;
+  --color-bg: #FFF9E6;
+  --color-dark-ink: #2D2D44;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    direction: rtl;
+    font-family: 'Fredoka', sans-serif;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--color-bg);
+    direction: rtl;
+    font-family: 'Fredoka', sans-serif;
+    color: var(--color-dark-ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  #root {
+    min-height: 100vh;
+    direction: rtl;
+  }
+}
+
+@layer components {
+  .comic-border {
+    border: 3px solid var(--color-dark-ink);
+    box-shadow: 4px 4px 0 var(--color-dark-ink);
+  }
+
+  .comic-border-lg {
+    border: 3px solid var(--color-dark-ink);
+    box-shadow: 6px 6px 0 var(--color-dark-ink);
+  }
+
+  .btn-press {
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+
+  .btn-press:active {
+    transform: translate(4px, 4px);
+    box-shadow: 0px 0px 0 var(--color-dark-ink);
+  }
+}
+
+@layer utilities {
+  .text-stroke {
+    -webkit-text-stroke: 1px var(--color-dark-ink);
+  }
+}
