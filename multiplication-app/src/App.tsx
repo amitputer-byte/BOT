@@ -1,26 +1,33 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useProfileStore } from './store/profileStore';
 
 // Lazy-load screens
 const ProfileSelectScreen = lazy(() => import('./screens/ProfileSelectScreen'));
-const HomeScreen = lazy(() => import('./screens/HomeScreen'));
-const PracticeScreen = lazy(() => import('./screens/PracticeScreen'));
-const AdventureScreen = lazy(() => import('./screens/AdventureScreen'));
-const AchievementsScreen = lazy(() => import('./screens/AchievementsScreen'));
-const SettingsScreen = lazy(() => import('./screens/SettingsScreen'));
+const HomeScreen          = lazy(() => import('./screens/HomeScreen'));
+const PracticeScreen      = lazy(() => import('./screens/PracticeScreen'));
+const AdventureScreen     = lazy(() => import('./screens/AdventureScreen'));
+const AchievementsScreen  = lazy(() => import('./screens/AchievementsScreen'));
+const SettingsScreen      = lazy(() => import('./screens/SettingsScreen'));
+
+// ─── Page transitions ─────────────────────────────────────────────────────────
 
 const pageVariants = {
-  initial: { opacity: 0, x: 20 },
-  animate: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: -20 },
+  initial:  { opacity: 0, x: 20 },
+  animate:  { opacity: 1, x: 0 },
+  exit:     { opacity: 0, x: -20 },
 };
 
-const pageTransition = {
-  duration: 0.25,
-  ease: 'easeInOut',
-};
+const pageTransition = { duration: 0.25, ease: 'easeInOut' as const };
+
+// ─── Loading fallback ─────────────────────────────────────────────────────────
 
 const LoadingFallback: React.FC = () => (
   <div className="min-h-screen bg-bg flex items-center justify-center">
@@ -34,12 +41,28 @@ const LoadingFallback: React.FC = () => (
   </div>
 );
 
-// Redirect based on whether a profile is active
+// ─── Root redirect ────────────────────────────────────────────────────────────
+
 const RootRedirect: React.FC = () => {
-  const getActiveProfile = useProfileStore((s) => s.getActiveProfile);
-  const profile = getActiveProfile();
-  return <Navigate to={profile ? '/home' : '/profile'} replace />;
+  const activeProfileId = useProfileStore((s) => s.activeProfileId);
+  return <Navigate to={activeProfileId ? '/home' : '/profile'} replace />;
 };
+
+// ─── Protected route ─────────────────────────────────────────────────────────
+
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+}
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const activeProfileId = useProfileStore((s) => s.activeProfileId);
+  if (!activeProfileId) {
+    return <Navigate to="/profile" replace />;
+  }
+  return <>{children}</>;
+};
+
+// ─── Animated routes ─────────────────────────────────────────────────────────
 
 const AnimatedRoutes: React.FC = () => {
   const location = useLocation();
@@ -56,16 +79,54 @@ const AnimatedRoutes: React.FC = () => {
         className="min-h-screen"
       >
         <Routes location={location}>
-          {/* Root: redirect based on profile */}
+          {/* Root: redirect based on active profile */}
           <Route path="/" element={<RootRedirect />} />
-          {/* Profile selection */}
+
+          {/* Profile selection (public) */}
           <Route path="/profile" element={<ProfileSelectScreen />} />
-          {/* Main screens */}
-          <Route path="/home" element={<HomeScreen />} />
-          <Route path="/practice" element={<PracticeScreen />} />
-          <Route path="/adventure" element={<AdventureScreen />} />
-          <Route path="/achievements" element={<AchievementsScreen />} />
-          <Route path="/settings" element={<SettingsScreen />} />
+
+          {/* Protected screens */}
+          <Route
+            path="/home"
+            element={
+              <ProtectedRoute>
+                <HomeScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/practice"
+            element={
+              <ProtectedRoute>
+                <PracticeScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/adventure"
+            element={
+              <ProtectedRoute>
+                <AdventureScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/achievements"
+            element={
+              <ProtectedRoute>
+                <AchievementsScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsScreen />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -74,14 +135,14 @@ const AnimatedRoutes: React.FC = () => {
   );
 };
 
-const App: React.FC = () => {
-  return (
-    <BrowserRouter>
-      <Suspense fallback={<LoadingFallback />}>
-        <AnimatedRoutes />
-      </Suspense>
-    </BrowserRouter>
-  );
-};
+// ─── App ──────────────────────────────────────────────────────────────────────
+
+const App: React.FC = () => (
+  <BrowserRouter>
+    <Suspense fallback={<LoadingFallback />}>
+      <AnimatedRoutes />
+    </Suspense>
+  </BrowserRouter>
+);
 
 export default App;
