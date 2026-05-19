@@ -31,6 +31,9 @@ interface ProgressStore {
   checkAndUpdateStreak: (profileId: string) => void;
   getTableStars: (profileId: string, table: number) => 0 | 1 | 2 | 3;
   resetProgress: (profileId: string) => void;
+  getMasteredTables: (profileId: string) => number[];
+  getOverallAccuracy: (profileId: string) => number;
+  getBestStreak: (profileId: string) => number;
 }
 
 export const useProgressStore = create<ProgressStore>()(
@@ -220,6 +223,33 @@ export const useProgressStore = create<ProgressStore>()(
             [profileId]: createEmptyProgress(profileId),
           },
         }));
+      },
+
+      getMasteredTables: (profileId: string): number[] => {
+        const { progress } = get();
+        const p = progress[profileId];
+        if (!p) return [];
+        return [2, 3, 4, 5, 6, 7, 8, 9, 10].filter((table) => {
+          const t = p.byTable[table];
+          return t && t.attempted >= 10 && t.correct / t.attempted >= 0.9;
+        });
+      },
+
+      getOverallAccuracy: (profileId: string): number => {
+        const { progress } = get();
+        const p = progress[profileId];
+        if (!p || p.totalAttempted === 0) return 0;
+        return Math.round((p.totalCorrect / p.totalAttempted) * 100);
+      },
+
+      getBestStreak: (profileId: string): number => {
+        const { progress } = get();
+        const p = progress[profileId];
+        if (!p) return 0;
+        return Object.values(p.byTable).reduce(
+          (max, t) => Math.max(max, t.bestStreak),
+          0,
+        );
       },
     }),
     {

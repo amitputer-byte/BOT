@@ -66,3 +66,40 @@
     -webkit-text-stroke: 1px var(--color-dark-ink);
   }
 }
+
+/* ── Print styles for certificates ───────────────────────────────────────── */
+@media print {
+  /* Hide everything by default */
+  body > * {
+    display: none !important;
+  }
+
+  /* Show only the root so React content is accessible */
+  body > #root {
+    display: block !important;
+  }
+
+  /* Hide everything inside root except the target certificate */
+  #root > * {
+    display: none !important;
+  }
+
+  /* When data-print-cert is set, show only that certificate */
+  .print-certificate {
+    display: none !important;
+  }
+
+  body[data-print-cert] .print-certificate {
+    display: none !important;
+  }
+
+  /* Generic fallback: show all unlocked certificates when printing without a target */
+  body:not([data-print-cert]) .print-certificate {
+    display: block !important;
+    page-break-after: always;
+    border: 4px double #B8860B !important;
+    box-shadow: none !important;
+    margin: 40px auto !important;
+    max-width: 480px;
+  }
+}
