@@ -15,7 +15,8 @@
     "framer-motion": "^11.0.0",
     "howler": "^2.2.4",
     "zustand": "^4.5.0",
-    "lucide-react": "^0.344.0"
+    "lucide-react": "^0.344.0",
+    "react-confetti": "^6.1.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
