@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useProfileStore } from './store/profileStore';
 
 // Lazy-load screens
 const ProfileSelectScreen = lazy(() => import('./screens/ProfileSelectScreen'));
@@ -33,6 +34,13 @@ const LoadingFallback: React.FC = () => (
   </div>
 );
 
+// Redirect based on whether a profile is active
+const RootRedirect: React.FC = () => {
+  const getActiveProfile = useProfileStore((s) => s.getActiveProfile);
+  const profile = getActiveProfile();
+  return <Navigate to={profile ? '/home' : '/profile'} replace />;
+};
+
 const AnimatedRoutes: React.FC = () => {
   const location = useLocation();
 
@@ -48,7 +56,11 @@ const AnimatedRoutes: React.FC = () => {
         className="min-h-screen"
       >
         <Routes location={location}>
-          <Route path="/" element={<ProfileSelectScreen />} />
+          {/* Root: redirect based on profile */}
+          <Route path="/" element={<RootRedirect />} />
+          {/* Profile selection */}
+          <Route path="/profile" element={<ProfileSelectScreen />} />
+          {/* Main screens */}
           <Route path="/home" element={<HomeScreen />} />
           <Route path="/practice" element={<PracticeScreen />} />
           <Route path="/adventure" element={<AdventureScreen />} />

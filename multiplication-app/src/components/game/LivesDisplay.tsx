@@ -18,14 +18,15 @@ export const LivesDisplay: React.FC<LivesDisplayProps> = ({
           <AnimatePresence key={i} mode="wait">
             <motion.span
               key={`heart-${i}-${isActive}`}
-              initial={{ scale: isActive ? 1 : 1.3 }}
+              initial={!isActive ? { scale: 1.4 } : { scale: 1 }}
               animate={{ scale: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
               transition={
                 !isActive
                   ? { type: 'spring', stiffness: 500, damping: 10 }
-                  : {}
+                  : { duration: 0.2 }
               }
-              className={`text-2xl select-none ${isActive ? '' : 'grayscale opacity-40'}`}
+              className={`text-2xl select-none leading-none ${isActive ? '' : 'grayscale opacity-35'}`}
             >
               ❤️
             </motion.span>

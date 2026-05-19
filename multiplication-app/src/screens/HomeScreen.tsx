@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useProfileStore } from '../store/profileStore';
 import { useProgressStore } from '../store/progressStore';
@@ -7,6 +7,54 @@ import { Card } from '../components/ui/Card';
 import { MascotCharacter } from '../components/character/MascotCharacter';
 import { BackgroundDecoration } from '../components/layout/BackgroundDecoration';
 import { ProgressBar } from '../components/ui/ProgressBar';
+
+// ─── Bottom Navigation ────────────────────────────────────────────────────────
+
+const navItems = [
+  { path: '/home', label: 'בית', icon: '🏠' },
+  { path: '/practice', label: 'תרגול', icon: '✏️' },
+  { path: '/adventure', label: 'הרפתקה', icon: '🗡️' },
+  { path: '/achievements', label: 'הישגים', icon: '🏆' },
+  { path: '/settings', label: 'הגדרות', icon: '⚙️' },
+];
+
+const BottomNav: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  return (
+    <div
+      className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t-3 border-dark-ink
+                 flex items-center justify-around px-2 pb-safe"
+      style={{ borderTop: '3px solid #2D2D44' }}
+    >
+      {navItems.map((item) => {
+        const active = location.pathname === item.path;
+        return (
+          <motion.button
+            key={item.path}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => navigate(item.path)}
+            className={[
+              'flex flex-col items-center justify-center py-2 px-3 min-w-[52px] min-h-[52px]',
+              'font-fredoka text-xs rounded-xl cursor-pointer select-none',
+              'transition-colors duration-150',
+              active ? 'text-primary-dark bg-primary/20' : 'text-dark-ink/60',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <span className="text-2xl leading-tight">{item.icon}</span>
+            <span className="leading-tight">{item.label}</span>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── Animation variants ───────────────────────────────────────────────────────
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -20,6 +68,8 @@ const itemVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },
 };
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -44,14 +94,10 @@ export const HomeScreen: React.FC = () => {
   ).length;
 
   const greetingEmoji =
-    progress.totalAttempted === 0
-      ? '👋'
-      : progress.dailyStreak >= 7
-      ? '🔥'
-      : '😊';
+    progress.totalAttempted === 0 ? '👋' : progress.dailyStreak >= 7 ? '🔥' : '😊';
 
   return (
-    <div className="relative min-h-screen bg-bg overflow-hidden">
+    <div className="relative min-h-screen bg-bg overflow-hidden pb-20">
       <BackgroundDecoration />
 
       <div className="relative z-10 max-w-md mx-auto px-4 py-6">
@@ -61,19 +107,25 @@ export const HomeScreen: React.FC = () => {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => navigate('/')}
-            className="text-dark-ink/60 hover:text-dark-ink font-fredoka text-sm border-2 border-dark-ink/30 rounded-xl px-3 py-1 bg-white/80"
+            className="text-dark-ink/60 hover:text-dark-ink font-fredoka text-sm border-2
+                       border-dark-ink/30 rounded-xl px-3 py-1 bg-white/80 cursor-pointer"
           >
             החלף שחקן
-          </button>
-          <button
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 20 }}
+            whileTap={{ scale: 0.9 }}
             onClick={() => navigate('/settings')}
-            className="text-2xl"
+            className="text-2xl cursor-pointer"
             aria-label="הגדרות"
           >
             ⚙️
-          </button>
+          </motion.button>
         </motion.div>
 
         {/* Welcome section */}
@@ -93,9 +145,14 @@ export const HomeScreen: React.FC = () => {
             שלום, {profile.name}! {greetingEmoji}
           </h1>
           {progress.dailyStreak > 1 && (
-            <p className="text-secondary font-fredoka font-semibold mt-1">
+            <motion.p
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-secondary font-fredoka font-semibold mt-1"
+            >
               🔥 רצף של {progress.dailyStreak} ימים!
-            </p>
+            </motion.p>
           )}
         </motion.div>
 
@@ -116,9 +173,7 @@ export const HomeScreen: React.FC = () => {
           </motion.div>
           <motion.div variants={itemVariants}>
             <Card padding="sm" className="text-center">
-              <div className="text-3xl font-bold text-accent font-fredoka">
-                {accuracy}%
-              </div>
+              <div className="text-3xl font-bold text-accent font-fredoka">{accuracy}%</div>
               <div className="text-xs text-dark-ink/60 font-fredoka">דיוק</div>
             </Card>
           </motion.div>
@@ -131,6 +186,26 @@ export const HomeScreen: React.FC = () => {
             </Card>
           </motion.div>
         </motion.div>
+
+        {/* Daily streak card */}
+        {progress.dailyStreak > 0 && (
+          <motion.div
+            variants={itemVariants}
+            initial="hidden"
+            animate="visible"
+            className="mb-5"
+          >
+            <Card padding="sm" className="flex items-center gap-3">
+              <span className="text-3xl">🔥</span>
+              <div className="flex-1">
+                <p className="font-fredoka font-bold text-dark-ink text-sm">
+                  רצף יומי — {progress.dailyStreak} ימים
+                </p>
+                <ProgressBar value={Math.min((progress.dailyStreak / 30) * 100, 100)} height="sm" />
+              </div>
+            </Card>
+          </motion.div>
+        )}
 
         {/* Progress bar */}
         {progress.totalAttempted > 0 && (
@@ -156,6 +231,7 @@ export const HomeScreen: React.FC = () => {
           animate="visible"
           className="grid grid-cols-1 gap-4"
         >
+          {/* Practice */}
           <motion.div variants={itemVariants}>
             <motion.button
               whileHover={{ scale: 1.03, y: -2 }}
@@ -167,13 +243,14 @@ export const HomeScreen: React.FC = () => {
               <div className="flex items-center gap-4">
                 <span className="text-5xl">✏️</span>
                 <div>
-                  <h2 className="text-2xl font-bold text-dark-ink">תרגול</h2>
+                  <h2 className="text-2xl font-bold text-dark-ink">תרגול חופשי</h2>
                   <p className="text-dark-ink/70 text-sm">תרגל לוחות כפל ספציפיים</p>
                 </div>
               </div>
             </motion.button>
           </motion.div>
 
+          {/* Adventure */}
           <motion.div variants={itemVariants}>
             <motion.button
               whileHover={{ scale: 1.03, y: -2 }}
@@ -194,6 +271,7 @@ export const HomeScreen: React.FC = () => {
             </motion.button>
           </motion.div>
 
+          {/* Achievements */}
           <motion.div variants={itemVariants}>
             <motion.button
               whileHover={{ scale: 1.03, y: -2 }}
@@ -215,6 +293,9 @@ export const HomeScreen: React.FC = () => {
           </motion.div>
         </motion.div>
       </div>
+
+      {/* Bottom Navigation */}
+      <BottomNav />
     </div>
   );
 };

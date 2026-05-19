@@ -20,13 +20,13 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -300 }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="bg-white border-3 border-dark-ink rounded-2xl p-8 text-center mx-4"
-      style={{ boxShadow: '4px 4px 0px #FFEB3B, 6px 6px 0px #2D2D44' }}
+      className="bg-white border-3 border-dark-ink rounded-2xl p-6 text-center mx-4"
+      style={{ boxShadow: '4px 4px 0px #FFEB3B, 8px 8px 0px #2D2D44' }}
     >
       <div className="text-sm font-fredoka text-dark-ink/50 mb-2">
         שאלה {questionNumber} מתוך {total}
       </div>
-      <div className="flex items-center justify-center gap-3 py-2" dir="ltr">
+      <div className="flex items-center justify-center gap-2 py-2" dir="ltr">
         <span
           className="font-fredoka font-bold text-primary-dark"
           style={{ fontSize: '72px', lineHeight: 1 }}
