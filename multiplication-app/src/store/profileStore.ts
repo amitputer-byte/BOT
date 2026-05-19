@@ -5,10 +5,12 @@ import type { Profile, AvatarId } from '../types';
 interface ProfileStore {
   profiles: Profile[];
   activeProfileId: string | null;
-  addProfile: (name: string, avatar: AvatarId) => void;
+  /** Creates a new profile and returns its id */
+  addProfile: (name: string, avatar: AvatarId) => string;
   deleteProfile: (id: string) => void;
   setActiveProfile: (id: string) => void;
   getActiveProfile: () => Profile | null;
+  updateProfile: (id: string, updates: Partial<Pick<Profile, 'name' | 'avatar'>>) => void;
 }
 
 export const useProfileStore = create<ProfileStore>()(
@@ -17,7 +19,7 @@ export const useProfileStore = create<ProfileStore>()(
       profiles: [],
       activeProfileId: null,
 
-      addProfile: (name: string, avatar: AvatarId) => {
+      addProfile: (name: string, avatar: AvatarId): string => {
         const newProfile: Profile = {
           id: `profile-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           name,
@@ -26,8 +28,10 @@ export const useProfileStore = create<ProfileStore>()(
         };
         set((state) => ({
           profiles: [...state.profiles, newProfile],
+          // Auto-activate first profile
           activeProfileId: state.activeProfileId ?? newProfile.id,
         }));
+        return newProfile.id;
       },
 
       deleteProfile: (id: string) => {
@@ -49,9 +53,17 @@ export const useProfileStore = create<ProfileStore>()(
         const { profiles, activeProfileId } = get();
         return profiles.find((p) => p.id === activeProfileId) ?? null;
       },
+
+      updateProfile: (id: string, updates: Partial<Pick<Profile, 'name' | 'avatar'>>) => {
+        set((state) => ({
+          profiles: state.profiles.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          ),
+        }));
+      },
     }),
     {
-      name: 'kfali-profiles',
+      name: 'multiplication-profiles',
     }
   )
 );

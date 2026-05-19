@@ -23,11 +23,14 @@ function getTodayDateString(): string {
 
 interface ProgressStore {
   progress: Record<string, Progress>;
+  initProgress: (profileId: string) => void;
   getProgress: (profileId: string) => Progress;
   recordAnswer: (profileId: string, question: Question, correct: boolean, timeMs: number) => void;
   unlockAchievement: (profileId: string, achievementId: string) => void;
   updateAdventureProgress: (profileId: string, level: number, stars: 1 | 2 | 3) => void;
   checkAndUpdateStreak: (profileId: string) => void;
+  getTableStars: (profileId: string, table: number) => 0 | 1 | 2 | 3;
+  resetProgress: (profileId: string) => void;
 }
 
 export const useProgressStore = create<ProgressStore>()(
@@ -35,9 +38,25 @@ export const useProgressStore = create<ProgressStore>()(
     (set, get) => ({
       progress: {},
 
-      getProgress: (profileId: string): Progress => {
+      initProgress: (profileId: string) => {
         const { progress } = get();
-        return progress[profileId] ?? createEmptyProgress(profileId);
+        if (!progress[profileId]) {
+          set((state) => ({
+            progress: {
+              ...state.progress,
+              [profileId]: createEmptyProgress(profileId),
+            },
+          }));
+        }
+      },
+
+      getProgress: (profileId: string): Progress => {
+        const { progress, initProgress } = get();
+        if (!progress[profileId]) {
+          initProgress(profileId);
+          return createEmptyProgress(profileId);
+        }
+        return progress[profileId];
       },
 
       recordAnswer: (profileId: string, question: Question, correct: boolean, _timeMs: number) => {
@@ -45,16 +64,14 @@ export const useProgressStore = create<ProgressStore>()(
           const existing = state.progress[profileId] ?? createEmptyProgress(profileId);
           const key = `${question.multiplicand}x${question.multiplier}`;
 
-          // Update table progress
           const tableEntry = existing.byTable[question.multiplicand] ?? {
             correct: 0,
             attempted: 0,
             bestStreak: 0,
           };
 
-          // Track current streak per question key in weights map
-          // Use questionWeights to also store current streak per-table prefix
-          const currentStreak = (existing.questionWeights[`_streak_${question.multiplicand}`] ?? 0);
+          // Track current streak per-table using a special key
+          const currentStreak = existing.questionWeights[`_streak_${question.multiplicand}`] ?? 0;
           const newStreak = correct ? currentStreak + 1 : 0;
           const newBestStreak = Math.max(tableEntry.bestStreak, newStreak);
 
@@ -64,11 +81,11 @@ export const useProgressStore = create<ProgressStore>()(
             bestStreak: newBestStreak,
           };
 
-          // Update question weight: higher weight = ask more often (for mistakes)
+          // Question weight: higher = ask more often (bad at this question)
           const currentWeight = existing.questionWeights[key] ?? 1;
           const newWeight = correct
-            ? Math.max(0.5, currentWeight * 0.8)
-            : Math.min(5, currentWeight * 1.5);
+            ? Math.max(0.5, currentWeight * 0.85)   // decrease slightly on correct
+            : Math.min(5, currentWeight * 1.5);      // increase on wrong
 
           const updatedProgress: Progress = {
             ...existing,
@@ -158,6 +175,7 @@ export const useProgressStore = create<ProgressStore>()(
           const existing = state.progress[profileId] ?? createEmptyProgress(profileId);
           const today = getTodayDateString();
 
+          // Same day: no-op
           if (existing.lastPlayedDate === today) return state;
 
           const yesterday = new Date();
@@ -166,8 +184,8 @@ export const useProgressStore = create<ProgressStore>()(
 
           const newStreak =
             existing.lastPlayedDate === yesterdayStr
-              ? existing.dailyStreak + 1
-              : 1;
+              ? existing.dailyStreak + 1  // consecutive day
+              : 1;                         // missed a day: reset
 
           return {
             progress: {
@@ -180,6 +198,28 @@ export const useProgressStore = create<ProgressStore>()(
             },
           };
         });
+      },
+
+      getTableStars: (profileId: string, table: number): 0 | 1 | 2 | 3 => {
+        const { progress } = get();
+        const p = progress[profileId];
+        if (!p) return 0;
+        const entry = p.byTable[table];
+        if (!entry || entry.attempted === 0) return 0;
+        const accuracy = entry.correct / entry.attempted;
+        if (accuracy >= 0.9) return 3;
+        if (accuracy >= 0.7) return 2;
+        if (accuracy >= 0.5) return 1;
+        return 0;
+      },
+
+      resetProgress: (profileId: string) => {
+        set((state) => ({
+          progress: {
+            ...state.progress,
+            [profileId]: createEmptyProgress(profileId),
+          },
+        }));
       },
     }),
     {
