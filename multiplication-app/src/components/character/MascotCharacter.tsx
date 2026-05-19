@@ -187,14 +187,32 @@ export const MascotCharacter: React.FC<MascotCharacterProps> = ({
 }) => {
   const [currentDialogue, setCurrentDialogue] = useState('');
 
+  // Pick initial dialogue when state or speechText changes
   useEffect(() => {
     const options = dialogues[state];
     const pick = options[Math.floor(Math.random() * options.length)];
     setCurrentDialogue(speechText ?? pick);
   }, [state, speechText]);
 
+  // Random dialogue rotation every 8–12 seconds (only when showing speech without override)
+  useEffect(() => {
+    if (!showSpeech || speechText) return;
+
+    const scheduleNext = () => {
+      const delay = 8000 + Math.random() * 4000; // 8–12 seconds
+      return setTimeout(() => {
+        const options = dialogues[state];
+        const pick = options[Math.floor(Math.random() * options.length)];
+        setCurrentDialogue(pick);
+        timerRef.current = scheduleNext();
+      }, delay);
+    };
+
+    const timerRef = { current: scheduleNext() };
+    return () => clearTimeout(timerRef.current);
+  }, [showSpeech, speechText, state]);
+
   const isExcited = state === 'excited';
-  const isHappy = state === 'happy';
 
   return (
     <div className={`relative inline-flex flex-col items-center ${className}`}>
@@ -239,11 +257,9 @@ export const MascotCharacter: React.FC<MascotCharacterProps> = ({
         animate={
           isExcited
             ? { y: [0, -12, 0, -8, 0], rotate: [-3, 3, -3, 3, 0] }
-            : isHappy
-            ? { y: [0, -6, 0] }
             : state === 'sleeping'
             ? { y: [0, 2, 0] }
-            : { y: [0, -4, 0] }
+            : { y: [0, -6, 0] }
         }
         transition={
           isExcited

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useSound } from '../hooks/useSound';
 import { useProfileStore } from '../store/profileStore';
 import { useProgressStore } from '../store/progressStore';
 import { AvatarDisplay } from '../components/character/AvatarDisplay';
@@ -25,7 +26,7 @@ const BottomNav: React.FC = () => {
   return (
     <div
       className="fixed bottom-0 left-0 right-0 z-30 bg-white
-                 flex items-center justify-around px-2 pb-safe"
+                 flex items-center justify-around px-2 safe-bottom"
       style={{ borderTop: '3px solid #2D2D44' }}
     >
       {navItems.map((item) => {
@@ -72,6 +73,15 @@ export const HomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const getActiveProfile = useProfileStore((s) => s.getActiveProfile);
   const getProgress = useProgressStore((s) => s.getProgress);
+  const { playAmbient, stopAmbient } = useSound();
+
+  // Auto-start ambient music on home screen
+  useEffect(() => {
+    playAmbient();
+    return () => {
+      stopAmbient();
+    };
+  }, [playAmbient, stopAmbient]);
 
   const profile = getActiveProfile();
 

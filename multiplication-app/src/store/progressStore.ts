@@ -23,6 +23,9 @@ function getTodayDateString(): string {
 
 interface ProgressStore {
   progress: Record<string, Progress>;
+  /** IDs of achievements newly unlocked — cleared after reading */
+  newAchievements: string[];
+  clearNewAchievements: () => void;
   initProgress: (profileId: string) => void;
   getProgress: (profileId: string) => Progress;
   recordAnswer: (profileId: string, question: Question, correct: boolean, timeMs: number) => void;
@@ -40,6 +43,9 @@ export const useProgressStore = create<ProgressStore>()(
   persist(
     (set, get) => ({
       progress: {},
+      newAchievements: [],
+
+      clearNewAchievements: () => set({ newAchievements: [] }),
 
       initProgress: (profileId: string) => {
         const { progress } = get();
@@ -106,11 +112,11 @@ export const useProgressStore = create<ProgressStore>()(
           };
 
           // Check for new achievements
-          const newAchievements = checkAchievements(updatedProgress);
-          if (newAchievements.length > 0) {
+          const freshAchievements = checkAchievements(updatedProgress);
+          if (freshAchievements.length > 0) {
             updatedProgress.achievements = [
               ...updatedProgress.achievements,
-              ...newAchievements,
+              ...freshAchievements,
             ];
           }
 
@@ -119,6 +125,10 @@ export const useProgressStore = create<ProgressStore>()(
               ...state.progress,
               [profileId]: updatedProgress,
             },
+            newAchievements: [
+              ...state.newAchievements,
+              ...freshAchievements,
+            ],
           };
         });
       },
@@ -156,11 +166,11 @@ export const useProgressStore = create<ProgressStore>()(
             },
           };
 
-          const newAchievements = checkAchievements(updatedProgress);
-          if (newAchievements.length > 0) {
+          const freshAdventureAchievements = checkAchievements(updatedProgress);
+          if (freshAdventureAchievements.length > 0) {
             updatedProgress.achievements = [
               ...updatedProgress.achievements,
-              ...newAchievements,
+              ...freshAdventureAchievements,
             ];
           }
 
@@ -169,6 +179,10 @@ export const useProgressStore = create<ProgressStore>()(
               ...state.progress,
               [profileId]: updatedProgress,
             },
+            newAchievements: [
+              ...state.newAchievements,
+              ...freshAdventureAchievements,
+            ],
           };
         });
       },

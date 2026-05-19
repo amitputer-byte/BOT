@@ -93,6 +93,39 @@ const FloatingNumber: React.FC<NumberFloatProps> = ({ x, y, num, delay }) => (
   </motion.div>
 );
 
+interface EquationFloatProps {
+  x: number;
+  y: number;
+  equation: string;
+  delay: number;
+  rotateDir: number; // 1 or -1
+}
+
+const FloatingEquation: React.FC<EquationFloatProps> = ({ x, y, equation, delay, rotateDir }) => (
+  <motion.div
+    className="absolute pointer-events-none font-fredoka font-bold select-none"
+    style={{
+      left: `${x}%`,
+      top: `${y}%`,
+      fontSize: '2.2rem',
+      color: '#2D2D44',
+      opacity: 0.06,
+    }}
+    animate={{
+      y: [0, rotateDir * -14, 0],
+      rotate: [rotateDir * -4, rotateDir * 4, rotateDir * -4],
+    }}
+    transition={{
+      duration: 9 + delay * 1.3,
+      delay,
+      repeat: Infinity,
+      ease: 'easeInOut',
+    }}
+  >
+    {equation}
+  </motion.div>
+);
+
 export const BackgroundDecoration: React.FC = () => {
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
@@ -127,6 +160,16 @@ export const BackgroundDecoration: React.FC = () => {
       <FloatingNumber x={82} y={22} num={9} delay={0.7} />
       <FloatingNumber x={45} y={70} num={4} delay={3.1} />
       <FloatingNumber x={72} y={72} num={6} delay={1.8} />
+
+      {/* Floating multiplication equations */}
+      <FloatingEquation x={5}  y={10} equation="2×3"  delay={0}   rotateDir={1}  />
+      <FloatingEquation x={55} y={6}  equation="5×7"  delay={1.4} rotateDir={-1} />
+      <FloatingEquation x={80} y={45} equation="4×8"  delay={2.1} rotateDir={1}  />
+      <FloatingEquation x={15} y={45} equation="9×6"  delay={0.6} rotateDir={-1} />
+      <FloatingEquation x={38} y={55} equation="3×3"  delay={3.3} rotateDir={1}  />
+      <FloatingEquation x={68} y={28} equation="7×8"  delay={1.0} rotateDir={-1} />
+      <FloatingEquation x={30} y={80} equation="6×4"  delay={2.7} rotateDir={1}  />
+      <FloatingEquation x={85} y={80} equation="2×9"  delay={0.3} rotateDir={-1} />
     </div>
   );
 };

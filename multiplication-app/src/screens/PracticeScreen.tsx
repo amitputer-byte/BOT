@@ -634,21 +634,38 @@ export const PracticeScreen: React.FC = () => {
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (view !== 'session') return;
+
+      // Escape: quit session and go back to table select
+      if (e.key === 'Escape') {
+        playClick();
+        setView('table-select');
+        return;
+      }
+
       const question = session.questions[session.currentIndex];
       if (!question || session.isAnswered) return;
+
       const keyMap: Record<string, number> = {
         '1': question.options[0],
         '2': question.options[1],
         '3': question.options[2],
         '4': question.options[3],
       };
+
       if (keyMap[e.key] !== undefined) {
         handleAnswer(keyMap[e.key]);
+        return;
+      }
+
+      // Space: select focused answer (first option as default)
+      if (e.key === ' ') {
+        e.preventDefault();
+        handleAnswer(question.options[0]);
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [view, session, handleAnswer]);
+  }, [view, session, handleAnswer, playClick]);
 
   if (!profile) {
     navigate('/');

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import {
   BrowserRouter,
   Routes,
@@ -8,6 +8,9 @@ import {
 } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useProfileStore } from './store/profileStore';
+import { SplashScreen } from './components/ui/SplashScreen';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { AchievementToast } from './components/ui/AchievementToast';
 
 // Lazy-load screens
 const ProfileSelectScreen = lazy(() => import('./screens/ProfileSelectScreen'));
@@ -20,12 +23,12 @@ const SettingsScreen      = lazy(() => import('./screens/SettingsScreen'));
 // ─── Page transitions ─────────────────────────────────────────────────────────
 
 const pageVariants = {
-  initial:  { opacity: 0, x: 20 },
+  initial:  { opacity: 0, x: 40 },
   animate:  { opacity: 1, x: 0 },
-  exit:     { opacity: 0, x: -20 },
+  exit:     { opacity: 0, x: -40 },
 };
 
-const pageTransition = { duration: 0.25, ease: 'easeInOut' as const };
+const pageTransition = { duration: 0.2, ease: 'easeInOut' as const };
 
 // ─── Loading fallback ─────────────────────────────────────────────────────────
 
@@ -135,14 +138,35 @@ const AnimatedRoutes: React.FC = () => {
   );
 };
 
+// ─── App shell with splash ────────────────────────────────────────────────────
+
+const AppShell: React.FC = () => {
+  const [splashDone, setSplashDone] = useState(false);
+
+  return (
+    <>
+      {/* Achievement toast — non-blocking, sits above everything */}
+      <AchievementToast />
+
+      {/* Splash screen — hard 0.8s then fades out */}
+      {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
+
+      {/* Main app (rendered underneath so it's ready instantly) */}
+      <Suspense fallback={<LoadingFallback />}>
+        <AnimatedRoutes />
+      </Suspense>
+    </>
+  );
+};
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 const App: React.FC = () => (
-  <BrowserRouter>
-    <Suspense fallback={<LoadingFallback />}>
-      <AnimatedRoutes />
-    </Suspense>
-  </BrowserRouter>
+  <ErrorBoundary>
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
+  </ErrorBoundary>
 );
 
 export default App;

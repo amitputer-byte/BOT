@@ -5,6 +5,8 @@ interface CardProps {
   children: React.ReactNode;
   className?: string;
   hover?: boolean;
+  /** Alias for hover — lifts the card on hover with a deeper shadow */
+  hoverable?: boolean;
   onClick?: () => void;
   padding?: 'sm' | 'md' | 'lg';
 }
@@ -19,9 +21,11 @@ export const Card: React.FC<CardProps> = ({
   children,
   className = '',
   hover = false,
+  hoverable = false,
   onClick,
   padding = 'md',
 }) => {
+  const isHoverable = hover || hoverable;
   const base = [
     'bg-white',
     'rounded-2xl',
@@ -34,12 +38,16 @@ export const Card: React.FC<CardProps> = ({
     .filter(Boolean)
     .join(' ');
 
-  if (hover || onClick) {
+  if (isHoverable || onClick) {
     return (
       <motion.div
         className={base}
         onClick={onClick}
-        whileHover={{ scale: 1.02, y: -2 }}
+        whileHover={
+          isHoverable
+            ? { y: -4, boxShadow: '6px 10px 0 #2D2D44' }
+            : { scale: 1.02, y: -2 }
+        }
         whileTap={onClick ? { scale: 0.98, x: 4, y: 4 } : {}}
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
       >
