@@ -22,7 +22,7 @@ export function t(key: string, vars?: Vars, locale: Locale = DEFAULT_LOCALE): st
   const template = DICTS[locale][key];
   if (template === undefined) {
     // Surface missing keys loudly in dev rather than shipping an English id.
-    if (__DEV__) console.warn(`[i18n] missing key: ${key}`);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn(`[i18n] missing key: ${key}`);
     return key;
   }
   if (!vars) return template;

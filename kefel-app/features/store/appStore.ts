@@ -74,6 +74,9 @@ export interface AppState {
   /** Mini-games feed the engine through this lightweight practice path. */
   practiceAnswer: (a: number, b: number, correct: boolean, usedHint: boolean, activity: string) => Promise<void>;
 
+  // parent reporting
+  getReport: () => Promise<import('@/data/schemas').ParentReportSnapshot | null>;
+
   // privacy controls
   setAnalyticsEnabled: (enabled: boolean) => Promise<void>;
   setSyncEnabled: (enabled: boolean) => Promise<void>;
@@ -388,6 +391,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       activity,
     });
     set({ mastery: nextMastery, rewards: nextRewards });
+  },
+
+  async getReport() {
+    const { repo, child, mastery, streak, analytics } = get();
+    if (!repo || !child) return null;
+    const { buildReport } = await import('@/features/parent/report');
+    const attempts = await repo.getAttempts(child.id);
+    const sessions = await repo.getSessions(child.id);
+    const report = buildReport({
+      childId: child.id,
+      states: [...mastery.values()],
+      attempts,
+      sessions,
+      streak,
+      now: Date.now(),
+    });
+    analytics?.track('parent_dashboard_viewed', {
+      masteredFacts: report.masteredFacts,
+      dueToday: report.dueToday,
+    });
+    return report;
   },
 
   async setAnalyticsEnabled(enabled) {

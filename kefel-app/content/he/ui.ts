@@ -75,6 +75,11 @@ export const he: Record<string, string> = {
   'reward.shop.unlock': 'פתחו ב-{cost} כוכבים',
   'reward.shop.owned': 'יש לך כבר',
   'reward.shop.equip': 'הלבישו',
+  'reward.cosmetic.hat_wizard': 'כובע קוסם',
+  'reward.cosmetic.hat_crown': 'כתר זהב',
+  'reward.cosmetic.pet_dragon': 'דרקון חיית מחמד',
+  'reward.cosmetic.bg_galaxy': 'רקע גלקסיה',
+  'reward.cosmetic.frame_gold': 'מסגרת זהב',
 
   // --- Games ---
   'game.garden.title': 'גינת המערכים',
