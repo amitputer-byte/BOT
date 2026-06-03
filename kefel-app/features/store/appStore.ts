@@ -64,12 +64,15 @@ export interface AppState {
 
   bootstrap: (repo: Repository, analytics: Analytics) => Promise<void>;
   completeOnboarding: (child: ChildProfile, parent: ParentProfile) => Promise<void>;
+  seedBaseline: (states: MasteryState[]) => Promise<void>;
   startSession: (kind: SessionKind) => void;
   useHint: () => void;
   stepDownToScaffold: () => void;
   answer: (input: Omit<AnswerInput, 'scaffolded' | 'usedHint'>) => Promise<void>;
   endSession: (quitEarly?: boolean) => Promise<void>;
   currentItem: () => SessionItem | null;
+  /** Mini-games feed the engine through this lightweight practice path. */
+  practiceAnswer: (a: number, b: number, correct: boolean, usedHint: boolean, activity: string) => Promise<void>;
 
   // privacy controls
   setAnalyticsEnabled: (enabled: boolean) => Promise<void>;
@@ -123,6 +126,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       durationMs: 0,
       avatar: child.avatar,
     });
+  },
+
+  async seedBaseline(states) {
+    const { repo, mastery } = get();
+    if (!repo) return;
+    await repo.upsertManyMastery(states);
+    const next = new Map(mastery);
+    for (const s of states) next.set(s.factId, s);
+    set({ mastery: next });
   },
 
   startSession(kind) {
@@ -336,6 +348,46 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set({ session: null, streak: nextStreak });
+  },
+
+  async practiceAnswer(a, b, correct, usedHint, activity) {
+    const { repo, child, mastery, rewards, analytics } = get();
+    if (!repo || !child) return;
+    const factId = `${Math.min(a, b)}x${Math.max(a, b)}`;
+    const item: SessionItem = { factId, a, b, product: a * b, kind: 'retrieval', source: 'fragile' };
+    const now = Date.now();
+    const result = processAnswer(
+      mastery.get(factId),
+      item,
+      { correct, usedHint, scaffolded: false, latencyMs: 0, rawValue: a * b },
+      { childId: child.id, sessionId: `game_${now}`, now, newAttemptId: newId('att') },
+    );
+    result.attempt.activity = activity;
+    await repo.appendAttempt(result.attempt);
+    await repo.upsertMastery(result.nextMastery);
+    const nextMastery = new Map(mastery);
+    nextMastery.set(factId, result.nextMastery);
+
+    const stars = (rewards?.stars ?? 0) + result.starsEarned;
+    const nextRewards: RewardInventory = {
+      childId: child.id,
+      stars,
+      unlockedCosmetics: rewards?.unlockedCosmetics ?? [],
+      equippedCosmetics: rewards?.equippedCosmetics ?? {},
+    };
+    await repo.saveRewards(nextRewards);
+    const card = factById(factId);
+    analytics?.track('fact_answered', {
+      factId,
+      family: card?.family ?? 'x0',
+      correct,
+      usedHint,
+      scaffolded: false,
+      isTransfer: false,
+      latencyMs: 0,
+      activity,
+    });
+    set({ mastery: nextMastery, rewards: nextRewards });
   },
 
   async setAnalyticsEnabled(enabled) {
