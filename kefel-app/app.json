@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "כפל קסם",
+    "slug": "kefel-kesem",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "kefelkesem",
+    "userInterfaceStyle": "light",
+    "locales": {
+      "he": "./content/he/app-store.json"
+    },
+    "extra": {
+      "router": { "origin": false },
+      "defaultLocale": "he"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "CFBundleDevelopmentRegion": "he",
+        "CFBundleAllowMixedLocalizations": true
+      }
+    },
+    "android": {
+      "supportsRtl": true,
+      "permissions": []
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      "expo-secure-store",
+      [
+        "expo-sqlite",
+        { "enableFTS": false }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
