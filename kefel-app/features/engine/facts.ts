@@ -13,8 +13,9 @@ export const MAX_OPERAND = 10;
 
 /**
  * Family rank == order in which the defining operand's strategy is taught.
- * A fact's family is the operand introduced LATEST, because the fact can only
- * be learned once the harder factor's strategy is available.
+ * A fact's family is the operand introduced EARLIEST, because that is the
+ * phase in which the child first gets a strategy for it: 2×7 is learned as
+ * "double 7" during ×2, and 0×7 trivially during ×0 — neither waits for ×7.
  */
 const FAMILY_RANK: Record<number, { rank: number; family: FactFamily }> = {
   0: { rank: 0, family: 'x0' },
@@ -31,7 +32,7 @@ const FAMILY_RANK: Record<number, { rank: number; family: FactFamily }> = {
 };
 
 function definingOperand(a: number, b: number): number {
-  return FAMILY_RANK[a]!.rank >= FAMILY_RANK[b]!.rank ? a : b;
+  return FAMILY_RANK[a]!.rank <= FAMILY_RANK[b]!.rank ? a : b;
 }
 
 const FAMILY_STRATEGIES: Record<FactFamily, StrategyKey[]> = {

@@ -18,10 +18,11 @@ describe('fact deck', () => {
     expect(canonicalId(4, 3)).toBe('3x4');
   });
 
-  it('assigns family by the operand introduced latest', () => {
-    expect(familyOf(2, 5)).toBe('x5'); // 5 taught after 2
-    expect(familyOf(2, 8)).toBe('x8');
-    expect(familyOf(0, 7)).toBe('x7');
+  it('assigns family by the operand introduced earliest (the strategy anchor)', () => {
+    expect(familyOf(2, 5)).toBe('x2'); // 2×5 is learned during ×2 (doubling)
+    expect(familyOf(2, 8)).toBe('x2');
+    expect(familyOf(0, 7)).toBe('x0'); // trivially during ×0
+    expect(familyOf(7, 8)).toBe('x7'); // both hard -> earlier of the two
   });
 
   it('orders x0/x1/x2 families before x7/x8', () => {
