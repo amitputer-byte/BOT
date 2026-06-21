@@ -32,4 +32,15 @@
 
 ## מבנה הפרויקט
 > סעיף חי — עדכן אותו ככל שהפרויקט מתפתח, כדי שסשן עתידי יתמצא מהר.
-- _(להשלמה בשלב 0: מיקום שכבת ה-storage, ה-engine, ה-games, דשבורד ההורים, וקובצי הטסטים.)_
+- `index.html` — נקודת הכניסה של Vite (head + `<style>` + `#app` + `<script type="module" src="/src/main.js">`).
+- `src/engine.js` — מנוע הלמידה הטהור (spaced-repetition + state machine). ESM, נטען גם ע"י הטסטים.
+- `src/storage.js` — **שכבת האחסון היחידה** מודעת-הפרופיל (registry, מצביע פעיל, state per-profile, `schemaVersion` + framework מיגרציות, מיגרציית legacy אידמפוטנטית עם גיבוי גולמי). כל I/O ל-localStorage עובר מכאן.
+- `src/app.js` — שכבת האפליקציה: UI, ניתוב (`go`/`render`), ~10 משחקים, חנות/חיות/קישוטים, מפת עולם, אונבורדינג, בחירת/הוספת/החלפת פרופיל, דשבורד הורים. משתמש ב-`ENGINE` וב-`Storage`.
+- `src/main.js` — entry שמייבא את `app.js`.
+- `test/engine.test.js` — רגרסיית מנוע. `test/storage.test.js` — מיגרציה + בידוד פרופילים. `test/flow.test.js` — jsdom: boot, RTL, טעינת כל 10 המשחקים.
+- `gan-hakefel.baseline.html` — צילום המקור לפני הרפקטור (נקודת חזרה).
+- בנייה: `npm run build` → `dist/index.html` (קובץ יחיד, inline module, offline).
+
+## פרופילים (מודל אחסון)
+- מפתחות: `gankefel:registry` (registry + `activeProfileId` + `legacyMigrated`), `gankefel:profile:<id>` ל-state של כל פרופיל, `gankefel:legacy-backup` לגיבוי הגולמי של השמירה הישנה.
+- `Profile = { id, name, avatar, createdAt }`. ה-legacy הישן (`gan-hakefel-v1`) עובר לפרופיל "תמרי" פעם אחת, ולא נמחק (רשת ביטחון נוספת).
