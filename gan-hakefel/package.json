@@ -1,0 +1,18 @@
+{
+  "name": "gan-hakefel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "גן הכפל — offline, single-file Hebrew multiplication learning app (profile-aware).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0",
+    "vite": "^5.4.0",
+    "vite-plugin-singlefile": "^2.0.2"
+  }
+}
