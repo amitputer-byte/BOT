@@ -226,6 +226,27 @@
   #app.shake-x{animation:shake-x .4s ease}
   @keyframes shake-x{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
   .reduced .particle,.reduced #app.shake-x{animation:none!important}
+  /* level-up confetti shower */
+  .confetti{position:fixed; top:-20px; width:10px; height:14px; border-radius:2px; opacity:.95;
+    animation:confetti-fall 1.6s cubic-bezier(.3,.6,.5,1) forwards}
+  @keyframes confetti-fall{to{transform:translate(var(--cx),105vh) rotate(540deg); opacity:.9}}
+  .reduced .confetti{display:none!important}
+  /* rank badge on the level-up celebration */
+  .card.levelup{background:linear-gradient(135deg,#fffbe9,#ffe9c9); border:2px solid var(--sun-dark)}
+  .rank-up{text-align:center; margin:6px 0 10px}
+  .rank-up .rank-emoji{font-size:72px; line-height:1; animation:pop .5s ease}
+  .rank-up .rank-name{font-size:24px; font-weight:900; color:var(--leaf-dark); margin-top:2px}
+  .reduced .rank-up .rank-emoji{animation:none!important}
+  /* visible rank chip + per-family stars on home / journey */
+  .rank-chip{display:flex; align-items:center; gap:10px}
+  .rank-chip .rc-emoji{font-size:40px; line-height:1}
+  .stars{letter-spacing:1px; font-size:15px; color:var(--sun-dark)}
+  .stars .off{opacity:.3}
+  /* orchard harvest game */
+  .orchard{font-size:64px; text-align:center; margin:2px 0 6px; animation:float 4s ease-in-out infinite}
+  .reduced .orchard{animation:none!important}
+  .choice.apple{position:relative; font-size:30px; line-height:1.1}
+  .choice.apple .num{display:block; font-size:20px; font-weight:900; color:var(--leaf-dark)}
   .hud{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:900}
   .hud-score{color:var(--sun-dark)} .hud-combo{color:#ff6a3d; min-height:1.4em}
   .hud-combo.pulse{animation:pop .35s ease}

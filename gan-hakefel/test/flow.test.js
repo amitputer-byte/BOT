@@ -7,10 +7,10 @@ import { JSDOM } from 'jsdom';
 const GAME_ROUTES = [
   'game_arrays', 'game_train', 'game_balloons', 'game_skip',
   'game_whack', 'game_shooter', 'game_memory', 'game_runner',
-  'game_duel', 'game_rhythm'
+  'game_duel', 'game_rhythm', 'game_orchard'
 ];
 
-test('app boots a seeded profile to home, RTL intact, all 10 games render', async () => {
+test('app boots a seeded profile to home, RTL intact, all games render', async () => {
   const dom = new JSDOM(
     '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"></head>' +
     '<body><div id="app" aria-live="polite"></div><div id="fx-layer"></div>' +
@@ -57,7 +57,13 @@ test('app boots a seeded profile to home, RTL intact, all 10 games render', asyn
   const bridge = window.__gankefel;
   assert.ok(bridge, 'test bridge exposed');
   assert.equal(bridge.route().name, 'home');
-  assert.ok(window.document.getElementById('app').innerHTML.length > 50, 'home rendered');
+  const homeHTML = window.document.getElementById('app').innerHTML;
+  assert.ok(homeHTML.length > 50, 'home rendered');
+  assert.ok(homeHTML.includes('דרגה'), 'home shows the champion rank badge');
+
+  // World map shows the star ratings.
+  bridge.go('world_map');
+  assert.ok(window.document.querySelector('.stars'), 'world map shows star ratings');
 
   // Every game renders without throwing and produces DOM.
   for (const route of GAME_ROUTES) {
@@ -66,6 +72,10 @@ test('app boots a seeded profile to home, RTL intact, all 10 games render', asyn
     assert.ok(html && html.length > 20, 'game rendered: ' + route);
     assert.equal(bridge.route().name, route, 'router on: ' + route);
   }
+
+  // Level-up celebration renders the rank badge when a rank is passed in.
+  bridge.go('celebrate', { title: 'עלית דרגה!', sub: 'מעולה', rank: bridge.ENGINE.rankForPct(0.5), then: 'home' });
+  assert.ok(window.document.querySelector('.rank-up'), 'level-up celebration shows a rank badge');
 
   // Games hub + parent dashboard also render.
   bridge.go('games_hub');

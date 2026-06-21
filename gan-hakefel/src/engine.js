@@ -301,6 +301,86 @@ function recommendNextAction(cards) {
   return 'ממשיכים בקצב — תרגול יומי קצר שומר על השליטה.';
 }
 
+/* ============================================================================
+ * Visible progression: champion rank ladder + per-family star ratings.
+ * Pure + deterministic, so the UI can render a clear "where am I / what's next"
+ * picture and the app can fire a celebration exactly when a rank is crossed.
+ * ==========================================================================*/
+
+/* Overall champion ranks, keyed by fraction of the fact space mastered. */
+var RANKS = [
+  { key: 'seed',   name: 'זרע',         emoji: '🌱', min: 0 },
+  { key: 'sprout', name: 'נבט',         emoji: '🌿', min: 0.10 },
+  { key: 'bud',    name: 'ניצן',        emoji: '🌷', min: 0.25 },
+  { key: 'star',   name: 'כוכבת',       emoji: '⭐', min: 0.45 },
+  { key: 'hero',   name: 'גיבורה',      emoji: '🦸', min: 0.65 },
+  { key: 'champ',  name: 'אלופה',       emoji: '👑', min: 0.85 },
+  { key: 'world',  name: 'אלופת העולם', emoji: '🏆', min: 1.0 }
+];
+
+/* Resolve a mastery fraction (0..1) to a rank + progress toward the next one. */
+function rankForPct(pct) {
+  pct = Math.max(0, Math.min(1, pct || 0));
+  var idx = 0;
+  for (var i = 0; i < RANKS.length; i++) { if (pct >= RANKS[i].min) idx = i; }
+  var cur = RANKS[idx];
+  var next = RANKS[idx + 1] || null;
+  var progressToNext = 1;
+  if (next) {
+    var span = next.min - cur.min;
+    progressToNext = span > 0 ? Math.max(0, Math.min(1, (pct - cur.min) / span)) : 1;
+  }
+  return {
+    index: idx, key: cur.key, name: cur.name, emoji: cur.emoji,
+    pct: pct, isMax: !next,
+    next: next ? { key: next.key, name: next.name, emoji: next.emoji, at: next.min } : null,
+    progressToNext: progressToNext
+  };
+}
+
+/* Convenience: rank straight from a card array. */
+function rankForCards(cards) { return rankForPct(computeKpis(cards).masteryPct); }
+
+/* Per-family star rating (0..3) from coverage thresholds. */
+function familyStars(coverage) {
+  if (coverage >= 0.999) return 3;
+  if (coverage >= 0.67) return 2;
+  if (coverage >= 0.34) return 1;
+  return 0;
+}
+
+/* How many more facts in this family must reach strong/mastered to earn the
+ * next star (0 if already at 3 stars). Exact, counted from the cards. */
+var STAR_THRESHOLDS = [0.34, 0.67, 0.999];
+function factsToNextStar(cards, key) {
+  var fam = cards.filter(function (c) { return c.family === key; });
+  if (!fam.length) return 0;
+  var good = fam.filter(function (c) { return c.state === 'strong' || c.state === 'mastered'; }).length;
+  var stars = familyStars(good / fam.length);
+  if (stars >= 3) return 0;
+  var need = Math.ceil(STAR_THRESHOLDS[stars] * fam.length);
+  return Math.max(1, need - good);
+}
+
+/* A render-ready description of the whole journey, family by family. */
+function buildJourney(cards) {
+  var active = activeIntroFamily(cards);
+  return FAMILY_ORDER.map(function (key) {
+    var fam = cards.filter(function (c) { return c.family === key; });
+    var mastered = fam.filter(function (c) { return c.state === 'mastered'; }).length;
+    var cov = familyCoverage(cards, key);
+    return {
+      key: key, label: FAMILY_LABEL[key],
+      total: fam.length, mastered: mastered,
+      coverage: cov, stars: familyStars(cov),
+      unlocked: familyUnlocked(cards, key),
+      active: key === active,
+      readyForBoss: familyReadyForBoss(cards, key),
+      toNextStar: factsToNextStar(cards, key)
+    };
+  });
+}
+
 var ENGINE = {
   DAY: DAY,
   INTERVAL_DAYS: INTERVAL_DAYS,
@@ -309,6 +389,7 @@ var ENGINE = {
   MASTERY_BOX: MASTERY_BOX,
   FAMILY_ORDER: FAMILY_ORDER,
   FAMILY_LABEL: FAMILY_LABEL,
+  RANKS: RANKS,
   familyOf: familyOf,
   familyIndex: familyIndex,
   factId: factId,
@@ -324,7 +405,12 @@ var ENGINE = {
   familyReadyForBoss: familyReadyForBoss,
   buildSession: buildSession,
   computeKpis: computeKpis,
-  recommendNextAction: recommendNextAction
+  recommendNextAction: recommendNextAction,
+  rankForPct: rankForPct,
+  rankForCards: rankForCards,
+  familyStars: familyStars,
+  factsToNextStar: factsToNextStar,
+  buildJourney: buildJourney
 };
 
 export { ENGINE };

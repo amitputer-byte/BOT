@@ -29,7 +29,7 @@ import * as Storage from "./storage.js";
       child: { nickname: 'תמרי', avatar: '👑', accessories: [] },
       settings: { sound: true, music: false, zen: false, haptics: true, reducedMotion: false, analytics: true, localOnly: true, sessionLength: 8, freeEntry: true },
       cards: E.buildFactSpace(),
-      rewards: { stars: 0, unlocked: [], badges: [], bossDone: [], decor: [], accessories: [], chests: 0, chestProgress: 0 },
+      rewards: { stars: 0, unlocked: [], badges: [], bossDone: [], decor: [], accessories: [], chests: 0, chestProgress: 0, rankSeen: 0 },
       collection: { pets: {} },
       garden: { placed: [] },
       streak: { weekKey: weekKeyOf(Date.now()), days: [], shield: true },
@@ -57,6 +57,11 @@ import * as Storage from "./storage.js";
     if (!Array.isArray(s.rewards.accessories)) s.rewards.accessories = [];
     if (typeof s.rewards.chests !== 'number') s.rewards.chests = 0;
     if (typeof s.rewards.chestProgress !== 'number') s.rewards.chestProgress = 0;
+    // Seed the "last seen rank" to the player's CURRENT rank so existing
+    // progress never triggers a retroactive flood of level-up celebrations.
+    if (typeof s.rewards.rankSeen !== 'number') {
+      try { s.rewards.rankSeen = E.rankForCards(s.cards).index; } catch (e) { s.rewards.rankSeen = 0; }
+    }
     s.collection = Object.assign({ pets: {} }, s.collection || {});
     if (!s.collection.pets || typeof s.collection.pets !== 'object') s.collection.pets = {};
     s.garden = Object.assign({ placed: [] }, s.garden || {});
@@ -342,6 +347,17 @@ import * as Storage from "./storage.js";
     if (n <= 0) return; S.rewards.stars += n;
     logEvent(EV.reward_earned, { amount: n, reason: reason });
   }
+  /* If the player's champion rank just went up, record it and return the new
+   * rank (so the caller can celebrate the level-up). Otherwise null. */
+  function popLevelUp() {
+    var rk = E.rankForCards(S.cards);
+    if (rk.index > (S.rewards.rankSeen || 0)) {
+      S.rewards.rankSeen = rk.index; save();
+      logEvent('rank_up', { rank: rk.key, index: rk.index });
+      return rk;
+    }
+    return null;
+  }
   function giveBadge(key) {
     if (S.rewards.badges.indexOf(key) >= 0) return false;
     S.rewards.badges.push(key); awardStars(5, 'badge:' + key);
@@ -424,6 +440,7 @@ import * as Storage from "./storage.js";
       case 'game_runner': return renderRunnerGame();
       case 'game_duel': return renderDuelGame();
       case 'game_rhythm': return renderRhythmGame();
+      case 'game_orchard': return renderOrchardGame();
       case 'shop': return renderShop();
       case 'garden_builder': return renderGardenBuilder();
       case 'world_map': return renderWorldMap();
@@ -804,6 +821,21 @@ import * as Storage from "./storage.js";
     if (S.history.length > 180) S.history.splice(0, S.history.length - 180);
   }
 
+  /* Go to a celebration, but if a champion rank was just crossed, upgrade it
+   * into a big level-up moment instead. */
+  function celebrate(params) {
+    var lu = popLevelUp();
+    if (lu) {
+      params = Object.assign({}, params, {
+        title: '🎉 עלית דרגה!',
+        sub: NAME() + ', הגעת לדרגת ' + lu.emoji + ' ' + lu.name + '! ' + cheer(CHAMP.affirm),
+        rank: lu,
+        then: params.then || 'home'
+      });
+    }
+    go('celebrate', params);
+  }
+
   function finishSession() {
     var mode = run ? run.mode : 'daily';
     var correct = run ? run.correct : 0, total = run ? run.items.filter(function (x) { return x.kind !== 'concept'; }).length : 0;
@@ -828,7 +860,7 @@ import * as Storage from "./storage.js";
       if (acc >= 0.8) {
         if (S.rewards.bossDone.indexOf(bossFam) < 0) { S.rewards.bossDone.push(bossFam); awardStars(10, 'boss'); }
         pendingCrowns = []; save();
-        go('celebrate', { title: '👑 אלופת ' + E.FAMILY_LABEL[bossFam] + '!', sub: NAME() + ', ניצחת את האתגר עם ' + correct + '/' + total + '! 🌍🏆', earned: earned, then: 'home' });
+        celebrate({ title: '👑 אלופת ' + E.FAMILY_LABEL[bossFam] + '!', sub: NAME() + ', ניצחת את האתגר עם ' + correct + '/' + total + '! 🌍🏆', earned: earned, then: 'home' });
         return;
       }
       go('celebrate', { title: 'כמעט, ' + NAME() + '! 💪', sub: 'אלופות מתאמנות ומנצחות. עוד ניסיון לאתגר ' + E.FAMILY_LABEL[bossFam] + '?', earned: earned, then: 'home' });
@@ -842,29 +874,65 @@ import * as Storage from "./storage.js";
       sub = NAME() + ', שלטת בכל ' + pendingCrowns.join(' וגם ') + ' — את אלופת העולם! 🌍';
       pendingCrowns = [];
     }
-    go('celebrate', { title: title, sub: sub, earned: earned, then: 'home' });
+    celebrate({ title: title, sub: sub, earned: earned, then: 'home' });
   }
 
   function renderCelebration(p) {
+    var rank = p.rank;
+    var rankHTML = rank ? '<div class="rank-up" aria-label="דרגה חדשה">' +
+      '<div class="rank-emoji">' + rank.emoji + '</div>' +
+      '<div class="rank-name">' + rank.name + '</div>' +
+      (rank.isMax ? '<small class="muted">הדרגה הגבוהה ביותר! 🌍</small>'
+                  : '<small class="muted">הדרגה הבאה: ' + rank.next.emoji + ' ' + rank.next.name + '</small>') +
+      '</div>' : '';
     app.innerHTML = '<div class="screen center">' +
       '<div class="stars-burst">🌟✨🌟</div>' +
-      '<div class="card">' +
+      '<div class="card' + (rank ? ' levelup' : '') + '">' +
       '<h1>' + (p.title || 'כל הכבוד!') + '</h1>' +
+      rankHTML +
       '<p class="muted">' + (p.sub || '') + '</p>' +
       (p.earned > 0 ? '<p style="font-size:22px;font-weight:800">+<span class="num">' + p.earned + '</span> ⭐</p>' : '') +
       '<button class="btn btn-primary" id="ok">המשך</button>' +
       '<button class="link" id="skip">דלג</button>' +
       '</div></div>';
     speak((p.title || '') + ' ' + (p.sub || ''));
-    try { FX.sfx('win'); var sb = app.querySelector('.stars-burst'); FX.burstAt(sb, '#ffd23f', 22); } catch (e) {}
+    try {
+      FX.sfx('win'); var sb = app.querySelector('.stars-burst'); FX.burstAt(sb, '#ffd23f', 22);
+      if (rank) confettiRain(rank.isMax ? 90 : 60); // extra celebration on level-up
+    } catch (e) {}
     document.getElementById('ok').onclick = function () { go(p.then || 'home'); };
     document.getElementById('skip').onclick = function () { go(p.then || 'home'); };
+  }
+
+  /* A fuller confetti shower for big moments (level-up). Respects reduced-motion
+   * and is a no-op without the fx layer. Built on the same particle system. */
+  function confettiRain(n) {
+    if (document.body.classList.contains('reduced')) return;
+    var host = document.getElementById('fx-layer'); if (!host) return;
+    var colors = ['#ffd23f', '#3aa76d', '#3775D6', '#ff7aa2', '#a06bd6', '#ff9f43'];
+    var w = window.innerWidth || 360;
+    for (var i = 0; i < (n || 60); i++) {
+      (function (i) {
+        var delay = Math.random() * 500;
+        FX.addTimer(setTimeout(function () {
+          var p = document.createElement('span'); p.className = 'confetti';
+          p.style.left = Math.random() * w + 'px';
+          p.style.background = colors[i % colors.length];
+          p.style.setProperty('--cx', (Math.random() * 80 - 40) + 'px');
+          p.style.transform = 'rotate(' + (Math.random() * 360) + 'deg)';
+          host.appendChild(p);
+          FX.addTimer(setTimeout(function () { if (p.parentNode) p.parentNode.removeChild(p); }, 1700));
+        }, delay));
+      })(i);
+    }
   }
 
   /* ============================== HOME ============================== */
   function renderHome() {
     logEvent(EV.app_open, {});
     var k = E.computeKpis(S.cards);
+    var rank = E.rankForCards(S.cards);
+    var rankPct = rank.isMax ? 100 : Math.round(rank.progressToNext * 100);
     var introFam = E.activeIntroFamily(S.cards);
     var nextLabel = introFam ? E.FAMILY_LABEL[introFam] : 'חזרה ושימור';
     var dueCount = S.cards.filter(function (c) { return c.state !== 'new' && c.nextDueAt <= Date.now(); }).length;
@@ -897,10 +965,16 @@ import * as Storage from "./storage.js";
       '<div style="font-size:54px;position:relative">' + S.child.avatar + (accHtml ? '<div style="position:absolute;top:-6px;inset-inline-end:-8px;display:flex;gap:2px">' + accHtml + '</div>' : '') + '</div>' +
       '<div style="flex:1"><h2 style="margin:0">👑 ' + escapeHtml(NAME()) + ' אלופת העולם</h2>' +
       '<small class="muted">' + cheer(CHAMP.affirm) + '</small></div></div>' +
-      '<div style="margin-top:12px"><small style="font-weight:800">מד אלופת העולם — ' +
-      Math.round(k.masteryPct * 100) + '% מהכפל בשליטה</small>' +
-      '<div class="progress" style="margin-top:6px"><i style="width:' + Math.max(3, Math.round(k.masteryPct * 100)) + '%"></i></div>' +
-      '<small class="muted">היעד הבא: ' + nextLabel + '</small></div></div>' +
+      '<div style="margin-top:12px">' +
+      '<div class="rank-chip"><span class="rc-emoji">' + rank.emoji + '</span>' +
+      '<div style="flex:1"><b>דרגה: ' + rank.name + '</b>' +
+      '<div class="progress" style="margin-top:6px"><i style="width:' + Math.max(3, rankPct) + '%"></i></div>' +
+      '<small class="muted">' + (rank.isMax
+        ? ('שיא! ' + Math.round(k.masteryPct * 100) + '% מהכפל בשליטה 🌍')
+        : ('עוד ' + (100 - rankPct) + '% לדרגת ' + rank.next.emoji + ' ' + rank.next.name)) + '</small>' +
+      '</div></div>' +
+      '<small class="muted" style="display:block;margin-top:6px">היעד הבא בלימוד: ' + nextLabel +
+      ' · ' + Math.round(k.masteryPct * 100) + '% מהכפל בשליטה</small></div></div>' +
 
       (S.rewards.chests > 0 ? '<div class="card" style="background:linear-gradient(135deg,#fff,#ffe9c9);border:2px solid var(--sun-dark)"><div class="row between"><h3 style="margin:0">🎁 יש לך תיבת אוצר!</h3><button class="btn btn-sun btn-sm" id="homeChest" style="width:auto">פתחי (' + S.rewards.chests + ')</button></div></div>' : '') +
 
@@ -922,7 +996,7 @@ import * as Storage from "./storage.js";
       '<small class="muted">הגינה של ' + escapeHtml(NAME()) + ' פורחת ככל שהיא שולטת — וגם עם מה שקנית בחנות.</small></div>' +
 
       '<div class="card"><h3>משחקים 🎮</h3>' +
-      '<p class="muted">עשרה משחקים — אקשן, זיכרון, מערכים ועוד.</p>' +
+      '<p class="muted">אחד-עשר משחקים — אקשן, זיכרון, מערכים ועוד.</p>' +
       '<button class="btn btn-sun" id="toGames">🎮 כל המשחקים</button></div>' +
 
       '<div class="card"><div class="row between"><h3 style="margin:0">🗺️ המסע שלי</h3><button class="btn btn-soft btn-sm" id="toMap" style="width:auto">למפה</button></div>' +
@@ -944,6 +1018,11 @@ import * as Storage from "./storage.js";
     el.onclick = fn; el.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } };
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function starsHTML(filled) {
+    var s = '';
+    for (var i = 0; i < 3; i++) s += '<span class="' + (i < filled ? '' : 'off') + '">★</span>';
+    return '<span class="stars" aria-label="' + filled + ' מתוך 3 כוכבים">' + s + '</span>';
+  }
 
   function startBoss(fam) {
     var cards = S.cards.filter(function (c) { return c.family === fam; });
@@ -1132,6 +1211,50 @@ import * as Storage from "./storage.js";
     });
   }
 
+  /* ============================== ACTION GAME: ORCHARD HARVEST (קטיף בוסתן) ==============================
+   * Learning outcome: fast, accurate single-fact recall with diagnostic
+   * distractors; combo scoring rewards a streak of correct picks. */
+  function renderOrchardGame() {
+    if (!run || run.game !== 'orchard') { run = { game: 'orchard', round: 0, n: 6, correct: 0, stars0: S.rewards.stars, score: 0, combo: 0 }; logEvent(EV.game_started, { game: 'orchard' }); }
+    if (run.round >= run.n) return finishGame('🍎 קטיף בוסתן');
+    var c = gamePickFact(); var p = c.product;
+    var choices = productChoices(p, c.a, c.b);
+    var html = choices.map(function (v) {
+      return '<button class="choice apple" data-v="' + v + '" aria-label="תפוח ' + v + '">🍎<span class="num">' + v + '</span></button>';
+    }).join('');
+    app.innerHTML = '<div class="screen">' + topbar(false) +
+      '<div class="card center">' + comboHud(run) +
+      '<h3>קטפי את התפוח של ' + mexpr(c.a + ' × ' + c.b) + '</h3>' +
+      '<p class="muted">(' + (run.round + 1) + '/' + run.n + ')</p>' +
+      '<div class="orchard">🌳</div>' +
+      '<div class="choices" id="apples">' + html + '</div>' +
+      '<div class="feedback" id="fb"></div>' +
+      '<button class="btn btn-soft btn-sm" id="say" style="width:auto;margin-top:8px">🔊 שמע</button>' +
+      '</div></div>';
+    speak('קטפי את התפוח של ' + c.a + ' כפול ' + c.b);
+    document.getElementById('say').onclick = function () { speak('כמה זה ' + c.a + ' כפול ' + c.b + '?'); };
+    var t0 = Date.now(), hadWrong = false, answered = false;
+    Array.prototype.forEach.call(app.querySelectorAll('.apple'), function (bn) {
+      bn.onclick = function () {
+        if (answered) return;
+        var v = Number(bn.getAttribute('data-v')); var fb = document.getElementById('fb');
+        if (v === p) {
+          answered = true;
+          FX.sfx(run.combo >= 2 ? 'combo' : 'correct'); FX.burstAt(bn, '#e23b3b', 14);
+          run.combo++; run.score += 10 * Math.max(1, run.combo); if (!hadWrong) run.correct++; hudUpdate(run);
+          gradeAndPersist(c.id, { correct: true, usedHint: hadWrong, latencyMs: Date.now() - t0, now: Date.now() });
+          fb.className = 'feedback good'; fb.textContent = cheer(CHAMP.success); save();
+          setTimeout(function () { run.round++; render(); }, 650);
+        } else {
+          hadWrong = true; run.combo = 0; hudUpdate(run); recordError(c, v);
+          bn.classList.add('shake'); FX.sfx('wrong');
+          fb.className = 'feedback bad'; fb.textContent = 'אופס, ' + v + ' לא נכון. נסי שוב!';
+          setTimeout(function () { bn.classList.remove('shake'); }, 400);
+        }
+      };
+    });
+  }
+
   /* ============================== GAMES HUB ============================== */
   function renderGamesHub() {
     var games = [
@@ -1144,7 +1267,8 @@ import * as Storage from "./storage.js";
       { id: 'game_balloons', emoji: '🎈', name: 'פיצוץ בלונים', tag: 'אקשן' },
       { id: 'game_skip', emoji: '🦘', name: 'קפיצות בגינה', tag: 'ספירה' },
       { id: 'game_arrays', emoji: '🌱', name: 'גינת המערכים', tag: 'הבנה' },
-      { id: 'game_train', emoji: '🚂', name: 'רכבת הכפל', tag: 'התאמה' }
+      { id: 'game_train', emoji: '🚂', name: 'רכבת הכפל', tag: 'התאמה' },
+      { id: 'game_orchard', emoji: '🍎', name: 'קטיף בוסתן', tag: 'אקשן' }
     ];
     app.innerHTML = '<div class="screen">' + topbar(false) +
       '<div class="card"><div class="row between"><h2 style="margin:0">🎮 משחקים</h2>' +
@@ -1418,7 +1542,7 @@ import * as Storage from "./storage.js";
     var score = run ? (run.score || 0) : 0;
     var endTitle = run ? run.endTitle : null;
     run = null;
-    go('celebrate', { title: endTitle || name, sub: score ? (NAME() + ', ניקוד: ' + score + ' 🎯') : ('כל הכבוד, ' + NAME() + '!'), earned: earned, then: 'games_hub' });
+    celebrate({ title: endTitle || name, sub: score ? (NAME() + ', ניקוד: ' + score + ' 🎯') : ('כל הכבוד, ' + NAME() + '!'), earned: earned, then: 'games_hub' });
   }
 
   /* ============================== TOY SHOP (pets · garden · style) + CHESTS ============================== */
@@ -1604,11 +1728,16 @@ import * as Storage from "./storage.js";
         var unlocked = E.familyUnlocked(S.cards, l.fam);
         var done = cov >= 0.999;
         var boss = E.familyReadyForBoss(S.cards, l.fam) && S.rewards.bossDone.indexOf(l.fam) < 0;
+        var stars = E.familyStars(cov);
+        var toStar = E.factsToNextStar(S.cards, l.fam);
+        var hint = !unlocked ? 'נפתח אחרי הארץ הקודמת' : done ? 'הושלם! 👑' : ('עוד ' + toStar + ' לכוכב הבא');
         var cls = done ? 'done' : unlocked ? 'open' : 'locked';
         return '<button class="land ' + cls + '" data-fam="' + l.fam + '" data-unlocked="' + (unlocked ? 1 : 0) + '"' + (i % 2 ? ' style="align-self:flex-end"' : '') + '>' +
           '<span class="land-emoji">' + (unlocked ? l.emoji : '🔒') + '</span>' +
           '<span class="land-name">' + l.name + '</span>' +
+          (unlocked ? starsHTML(stars) : '') +
           '<span class="land-bar"><i style="width:' + Math.round(cov * 100) + '%"></i></span>' +
+          '<small class="muted" style="font-size:11px">' + hint + '</small>' +
           (boss ? '<span class="land-boss">🏆 אתגר!</span>' : done ? '<span class="land-tag">👑</span>' : '') +
           '</button>';
       }).join('') +
