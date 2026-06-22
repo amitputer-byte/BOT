@@ -33,7 +33,7 @@ import * as Storage from "./storage.js";
       collection: { pets: {} },
       garden: { placed: [] },
       streak: { weekKey: weekKeyOf(Date.now()), days: [], shield: true },
-      stats: { sessionsCompleted: 0, totalTimeMs: 0, lastSessionAt: 0, gamesPlayed: 0, arraysCorrect: 0, errorTags: {} },
+      stats: { sessionsCompleted: 0, totalTimeMs: 0, lastSessionAt: 0, gamesPlayed: 0, arraysCorrect: 0, errorTags: {}, practice: { addCorrect: 0, addTotal: 0, wordCorrect: 0, wordTotal: 0 } },
       history: [],
       log: []
     };
@@ -68,6 +68,7 @@ import * as Storage from "./storage.js";
     if (!Array.isArray(s.garden.placed)) s.garden.placed = [];
     s.stats = Object.assign({}, d.stats, s.stats || {});
     if (!s.stats.errorTags || typeof s.stats.errorTags !== 'object') s.stats.errorTags = {};
+    if (!s.stats.practice || typeof s.stats.practice !== 'object') s.stats.practice = { addCorrect: 0, addTotal: 0, wordCorrect: 0, wordTotal: 0 };
     if (!Array.isArray(s.history)) s.history = [];
     if (!Array.isArray(s.log)) s.log = [];
     s.streak = Object.assign({}, d.streak, s.streak || {});
@@ -240,6 +241,13 @@ import * as Storage from "./storage.js";
       function (a, b) { return 'ל-<span class="num">' + a + '</span> ילדים יש <span class="num">' + b + '</span> בלונים לכל אחד. כמה בלונים יש יחד?'; },
       function (a, b) { return 'יש <span class="num">' + a + '</span> סלים, ובכל סל <span class="num">' + b + '</span> תפוחים. כמה תפוחים בסך הכול?'; },
       function (a, b) { return '<span class="num">' + a + '</span> פרפרים, ולכל פרפר <span class="num">' + b + '</span> נקודות על הכנפיים. כמה נקודות יש?'; }
+    ],
+    addWordTemplates: [
+      function (a, b) { return 'לתמרי יש <span class="num">' + a + '</span> מדבקות, וקיבלה עוד <span class="num">' + b + '</span>. כמה מדבקות יש לה עכשיו?'; },
+      function (a, b) { return 'בגינה <span class="num">' + a + '</span> פרחים אדומים ו-<span class="num">' + b + '</span> פרחים צהובים. כמה פרחים יש בסך הכול?'; },
+      function (a, b) { return 'באוטובוס נסעו <span class="num">' + a + '</span> ילדים, ובתחנה עלו עוד <span class="num">' + b + '</span>. כמה ילדים יש עכשיו באוטובוס?'; },
+      function (a, b) { return 'בקופה היו <span class="num">' + a + '</span> שקלים, ונוספו עוד <span class="num">' + b + '</span>. כמה שקלים יש בקופה?'; },
+      function (a, b) { return 'דנה אספה <span class="num">' + a + '</span> צדפים בבוקר ו-<span class="num">' + b + '</span> אחרי הצהריים. כמה צדפים אספה?'; }
     ]
   };
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -441,6 +449,10 @@ import * as Storage from "./storage.js";
       case 'game_duel': return renderDuelGame();
       case 'game_rhythm': return renderRhythmGame();
       case 'game_orchard': return renderOrchardGame();
+      case 'practice_hub': return renderPracticeHub();
+      case 'practice_add_h': return renderAddHoriz();
+      case 'practice_add_v': return renderAddVert();
+      case 'practice_word': return renderWordProblems();
       case 'shop': return renderShop();
       case 'garden_builder': return renderGardenBuilder();
       case 'world_map': return renderWorldMap();
@@ -999,6 +1011,10 @@ import * as Storage from "./storage.js";
       '<p class="muted">אחד-עשר משחקים — אקשן, זיכרון, מערכים ועוד.</p>' +
       '<button class="btn btn-sun" id="toGames">🎮 כל המשחקים</button></div>' +
 
+      '<div class="card"><h3>מרכז התרגול 📝</h3>' +
+      '<p class="muted">חיבור עד 100 (במאוזן ובמאונך) ושאלות מילוליות — כפל וחיבור.</p>' +
+      '<button class="btn btn-soft" id="toPractice">📝 לתרגול</button></div>' +
+
       '<div class="card"><div class="row between"><h3 style="margin:0">🗺️ המסע שלי</h3><button class="btn btn-soft btn-sm" id="toMap" style="width:auto">למפה</button></div>' +
       '<div class="map">' + familyNodes + '</div></div>' +
       '</div>';
@@ -1011,6 +1027,7 @@ import * as Storage from "./storage.js";
     if (S.rewards.chests > 0) bindBtn('homeChest', function () { var r = openChest(); FX.sfx('coin'); go('celebrate', { title: '🎁 תיבת אוצר!', sub: r ? ('זכית ב' + r.label + ' ' + r.key) : 'מצוין!', earned: 0, then: 'home' }); });
     if (bossFam) bindBtn('boss', function () { startBoss(bossFam); });
     bindBtn('toGames', function () { go('games_hub'); });
+    bindBtn('toPractice', function () { go('practice_hub'); });
     document.getElementById('toParent').onclick = function () { go('parent_gate', { then: 'parent_dash' }); };
   }
   function bindBtn(id, fn) {
@@ -1543,6 +1560,201 @@ import * as Storage from "./storage.js";
     var endTitle = run ? run.endTitle : null;
     run = null;
     celebrate({ title: endTitle || name, sub: score ? (NAME() + ', ניקוד: ' + score + ' 🎯') : ('כל הכבוד, ' + NAME() + '!'), earned: earned, then: 'games_hub' });
+  }
+
+  /* ============================== PRACTICE CENTRE (addition ≤100 + word problems) ==============================
+   * A separate activity area. It awards a little currency but deliberately does
+   * NOT feed the multiplication mastery state, ranks or the journey map. */
+  function practiceStats() {
+    if (!S.stats.practice) S.stats.practice = { addCorrect: 0, addTotal: 0, wordCorrect: 0, wordTotal: 0 };
+    return S.stats.practice;
+  }
+  function practiceGrade(kind, correct) {
+    var pr = practiceStats();
+    var key = (kind === 'word') ? 'word' : 'add';
+    pr[key + 'Total']++;
+    if (correct) { pr[key + 'Correct']++; awardStars(1, 'practice:' + kind); }
+    save();
+  }
+  function finishPractice(name) {
+    S.stats.gamesPlayed++; save();
+    logEvent(EV.game_completed, { game: name });
+    var earned = S.rewards.stars - (run ? run.stars0 : S.rewards.stars);
+    var score = run ? (run.score || 0) : 0;
+    run = null;
+    // Plain celebration (practice never changes the multiplication rank).
+    go('celebrate', { title: name, sub: score ? (NAME() + ', ניקוד: ' + score + ' 🎯') : ('כל הכבוד, ' + NAME() + '!'), earned: earned, then: 'practice_hub' });
+  }
+
+  function renderPracticeHub() {
+    var pr = practiceStats();
+    var addAcc = pr.addTotal ? Math.round(pr.addCorrect / pr.addTotal * 100) : 0;
+    var wordAcc = pr.wordTotal ? Math.round(pr.wordCorrect / pr.wordTotal * 100) : 0;
+    app.innerHTML = '<div class="screen">' + topbar(false) +
+      '<div class="card"><div class="row between"><h2 style="margin:0">📝 מרכז התרגול</h2><button class="link" id="back">בית</button></div>' +
+      '<p class="muted">חיבור עד 100 ושאלות מילוליות — תרגול נפרד ממסע הכפל.</p>' +
+      '<div class="grid2">' +
+      '<div class="tile" tabindex="0" role="button" id="addh"><span class="emoji">➕</span>חיבור במאוזן<small class="muted">a + b = ?</small></div>' +
+      '<div class="tile" tabindex="0" role="button" id="addv"><span class="emoji">🧮</span>חיבור במאונך<small class="muted">עם נשיאה</small></div>' +
+      '<div class="tile" tabindex="0" role="button" id="word"><span class="emoji">📖</span>שאלות מילוליות<small class="muted">כפל וחיבור</small></div>' +
+      '</div>' +
+      '<p class="muted" style="margin-top:10px">דיוק חיבור: <b>' + addAcc + '%</b> (' + pr.addTotal + ' תרגילים) · שאלות מילוליות: <b>' + wordAcc + '%</b> (' + pr.wordTotal + ')</p>' +
+      '</div></div>';
+    bindBtn('back', function () { go('home'); });
+    bindBtn('addh', function () { run = null; go('practice_add_h'); });
+    bindBtn('addv', function () { run = null; go('practice_add_v'); });
+    bindBtn('word', function () { run = null; go('practice_word'); });
+  }
+
+  /* Horizontal addition (a + b = ?), multiple choice. */
+  function renderAddHoriz() {
+    if (!run || run.game !== 'addh') { run = { game: 'addh', round: 0, n: 6, correct: 0, stars0: S.rewards.stars, score: 0, combo: 0 }; logEvent(EV.game_started, { game: 'add_horizontal' }); }
+    if (run.round >= run.n) return finishPractice('➕ חיבור במאוזן');
+    var prob = E.buildAdditionProblem({ max: 100, twoDigit: run.round >= 2 });
+    var choices = E.additionChoices(prob.sum);
+    app.innerHTML = '<div class="screen">' + topbar(false) +
+      '<div class="card center">' + comboHud(run) +
+      '<h3>כמה זה?</h3>' +
+      '<div class="prompt-q">' + mexpr(prob.a + ' + ' + prob.b) + '</div>' +
+      '<p class="muted">(' + (run.round + 1) + '/' + run.n + ')</p>' +
+      '<div class="choices" id="choices">' + choices.map(function (v) { return '<button class="choice" data-v="' + v + '"><span class="num">' + v + '</span></button>'; }).join('') + '</div>' +
+      '<div class="feedback" id="fb"></div>' +
+      '<button class="btn btn-soft btn-sm" id="say" style="width:auto;margin-top:8px">🔊 שמע</button>' +
+      '</div></div>';
+    speak('כמה זה ' + prob.a + ' ועוד ' + prob.b + '?');
+    bindBtn('say', function () { speak('כמה זה ' + prob.a + ' ועוד ' + prob.b + '?'); });
+    var answered = false, hadWrong = false;
+    Array.prototype.forEach.call(app.querySelectorAll('.choice'), function (bn) {
+      bn.onclick = function () {
+        if (answered) return;
+        var v = Number(bn.getAttribute('data-v')); var fb = document.getElementById('fb');
+        if (v === prob.sum) {
+          answered = true; bn.classList.add('correct');
+          FX.sfx(run.combo >= 2 ? 'combo' : 'correct'); FX.burstAt(bn, '#3aa76d', 14);
+          run.combo++; run.score += 10 * Math.max(1, run.combo); if (!hadWrong) run.correct++; hudUpdate(run);
+          practiceGrade('add', !hadWrong);
+          fb.className = 'feedback good'; fb.textContent = cheer(CHAMP.success);
+          setTimeout(function () { run.round++; render(); }, 650);
+        } else {
+          hadWrong = true; run.combo = 0; hudUpdate(run); bn.classList.add('shake'); FX.sfx('wrong');
+          fb.className = 'feedback bad'; fb.textContent = 'לא בדיוק, ' + v + '. נסי שוב!';
+          setTimeout(function () { bn.classList.remove('shake'); }, 400);
+        }
+      };
+    });
+  }
+
+  /* Vertical (column) addition with carry — the real notebook algorithm.
+   * The child fills the carry box and each result digit, then checks. */
+  function renderAddVert() {
+    if (!run || run.game !== 'addv') { run = { game: 'addv', round: 0, n: 5, correct: 0, stars0: S.rewards.stars, score: 0, combo: 0 }; logEvent(EV.game_started, { game: 'add_vertical' }); }
+    if (run.round >= run.n) return finishPractice('🧮 חיבור במאונך');
+    var prob = E.buildAdditionProblem({ max: 100, twoDigit: true, requireCarry: run.round % 2 === 0 });
+    var a = prob.a, b = prob.b, sum = prob.sum;
+    var u = sum % 10, t = Math.floor(sum / 10) % 10, h = Math.floor(sum / 100);
+    var carry = prob.carry; // expected carry into the tens column (0/1)
+    var needH = sum >= 100;
+    function dt(n) { return Math.floor(n / 10) % 10; }
+    function du(n) { return n % 10; }
+    app.innerHTML = '<div class="screen">' + topbar(false) +
+      '<div class="card center">' + comboHud(run) +
+      '<h3>חברי במאונך</h3>' +
+      '<p class="muted">מלאי את ספרת האחדות, את הנשיאה (אם יש), ואז את העשרות. (' + (run.round + 1) + '/' + run.n + ')</p>' +
+      '<div class="vadd" id="vadd">' +
+        '<div class="vrow carry-row"><span class="cell"></span><input class="cell carry-in" id="cin" inputmode="numeric" maxlength="1" aria-label="נשיאה"><span class="cell"></span></div>' +
+        '<div class="vrow"><span class="cell"></span><span class="cell">' + dt(a) + '</span><span class="cell">' + du(a) + '</span></div>' +
+        '<div class="vrow"><span class="cell op">+</span><span class="cell">' + dt(b) + '</span><span class="cell">' + du(b) + '</span></div>' +
+        '<div class="vline"></div>' +
+        '<div class="vrow">' +
+          '<input class="cell res' + (needH ? '' : ' ghost') + '" id="rh" inputmode="numeric" maxlength="1" aria-label="מאות"' + (needH ? '' : ' tabindex="-1"') + '>' +
+          '<input class="cell res" id="rt" inputmode="numeric" maxlength="1" aria-label="עשרות">' +
+          '<input class="cell res" id="ru" inputmode="numeric" maxlength="1" aria-label="אחדות">' +
+        '</div>' +
+      '</div>' +
+      '<div class="feedback" id="fb"></div>' +
+      '<div class="btn-row" style="justify-content:center"><button class="btn btn-primary btn-sm" id="check" style="width:auto">בדיקה</button>' +
+      '<button class="btn btn-soft btn-sm" id="say" style="width:auto">🔊 שמע</button></div>' +
+      '</div></div>';
+    speak('חברי במאונך ' + a + ' ועוד ' + b);
+    bindBtn('say', function () { speak('חברי ' + a + ' ועוד ' + b); });
+    // auto-advance focus units -> carry -> tens -> (hundreds)
+    var ru = document.getElementById('ru'), rt = document.getElementById('rt'), rh = document.getElementById('rh'), cin = document.getElementById('cin');
+    if (ru) ru.focus();
+    function digit(el) { var v = (el && el.value || '').trim(); return v === '' ? null : Number(v); }
+    var answered = false, hadWrong = false;
+    bindBtn('check', function () {
+      if (answered) return;
+      var okU = digit(ru) === u;
+      var okT = digit(rt) === t;
+      var okH = !needH || digit(rh) === h;
+      var dc = digit(cin);
+      var okC = (carry === 1) ? (dc === 1) : (dc === null || dc === 0);
+      [ru, rt].concat(needH ? [rh] : []).concat([cin]).forEach(function (el) { if (el) el.classList.remove('bad', 'good'); });
+      if (okU && okT && okH && okC) {
+        answered = true;
+        [ru, rt].concat(needH ? [rh] : []).forEach(function (el) { if (el) el.classList.add('good'); });
+        FX.sfx(run.combo >= 2 ? 'combo' : 'correct'); FX.burstAt(document.getElementById('vadd'), '#3aa76d', 16);
+        run.combo++; run.score += 12 * Math.max(1, run.combo); if (!hadWrong) run.correct++; hudUpdate(run);
+        practiceGrade('add', !hadWrong);
+        var fb = document.getElementById('fb'); fb.className = 'feedback good'; fb.textContent = cheer(CHAMP.success);
+        FX.addTimer(setTimeout(function () { run.round++; render(); }, 800));
+      } else {
+        hadWrong = true; run.combo = 0; hudUpdate(run); FX.sfx('wrong');
+        if (!okU && ru) ru.classList.add('bad');
+        if (!okC && cin) cin.classList.add('bad');
+        if (!okT && rt) rt.classList.add('bad');
+        if (!okH && rh) rh.classList.add('bad');
+        var fb2 = document.getElementById('fb'); fb2.className = 'feedback bad';
+        fb2.textContent = (!okU ? 'בדקי את האחדות. ' : '') + (!okC ? 'אל תשכחי את הנשיאה! ' : '') + (!okT ? 'בדקי את העשרות.' : '') || 'כמעט! נסי שוב.';
+      }
+    });
+  }
+
+  /* Word problems — mix of multiplication and addition (≤100), multiple choice. */
+  function renderWordProblems() {
+    if (!run || run.game !== 'word') { run = { game: 'word', round: 0, n: 6, correct: 0, stars0: S.rewards.stars, score: 0, combo: 0 }; logEvent(EV.game_started, { game: 'word' }); }
+    if (run.round >= run.n) return finishPractice('📖 שאלות מילוליות');
+    var useMul = Math.random() < 0.5;
+    var text, answer, choices, sayText;
+    if (useMul) {
+      var c = gamePickFact();
+      text = pick(C.wordTemplates)(c.a, c.b); answer = c.product; choices = productChoices(answer, c.a, c.b);
+      sayText = 'בעיה מילולית בכפל.';
+    } else {
+      var prob = E.buildAdditionProblem({ max: 100, twoDigit: run.round >= 2 });
+      text = pick(C.addWordTemplates)(prob.a, prob.b); answer = prob.sum; choices = E.additionChoices(answer);
+      sayText = 'בעיה מילולית בחיבור.';
+    }
+    app.innerHTML = '<div class="screen">' + topbar(false) +
+      '<div class="card">' + comboHud(run) +
+      '<h3>שאלה מילולית</h3>' +
+      '<p style="font-size:19px;font-weight:700;line-height:1.6">' + text + '</p>' +
+      '<p class="muted center">(' + (run.round + 1) + '/' + run.n + ')</p>' +
+      '<div class="choices" id="choices">' + choices.map(function (v) { return '<button class="choice" data-v="' + v + '"><span class="num">' + v + '</span></button>'; }).join('') + '</div>' +
+      '<div class="feedback" id="fb"></div>' +
+      '<button class="btn btn-soft btn-sm" id="say" style="width:auto;margin-top:8px">🔊 שמע</button>' +
+      '</div></div>';
+    speak(sayText);
+    bindBtn('say', function () { var tmp = document.createElement('div'); tmp.innerHTML = text; speak(tmp.textContent || sayText); });
+    var answered = false, hadWrong = false;
+    Array.prototype.forEach.call(app.querySelectorAll('.choice'), function (bn) {
+      bn.onclick = function () {
+        if (answered) return;
+        var v = Number(bn.getAttribute('data-v')); var fb = document.getElementById('fb');
+        if (v === answer) {
+          answered = true; bn.classList.add('correct');
+          FX.sfx(run.combo >= 2 ? 'combo' : 'correct'); FX.burstAt(bn, '#3aa76d', 14);
+          run.combo++; run.score += 10 * Math.max(1, run.combo); if (!hadWrong) run.correct++; hudUpdate(run);
+          practiceGrade('word', !hadWrong);
+          fb.className = 'feedback good'; fb.textContent = cheer(CHAMP.success);
+          setTimeout(function () { run.round++; render(); }, 700);
+        } else {
+          hadWrong = true; run.combo = 0; hudUpdate(run); bn.classList.add('shake'); FX.sfx('wrong');
+          fb.className = 'feedback bad'; fb.textContent = 'לא בדיוק. נסי לקרוא שוב!';
+          setTimeout(function () { bn.classList.remove('shake'); }, 400);
+        }
+      };
+    });
   }
 
   /* ============================== TOY SHOP (pets · garden · style) + CHESTS ============================== */

@@ -98,6 +98,30 @@ test('forecastAtRisk ranks lapsed > fragile > due_soon', () => {
   assert.equal(E.forecastAtRisk(cards, { now, limit: 1 }).length, 1);
 });
 
+test('buildAdditionProblem respects max / carry / two-digit constraints', () => {
+  for (let i = 0; i < 400; i++) {
+    const p = E.buildAdditionProblem({ max: 100 });
+    assert.ok(p.sum <= 100 && p.sum === p.a + p.b && p.a >= 1 && p.b >= 1, 'basic bounds');
+  }
+  for (let i = 0; i < 200; i++) {
+    const p = E.buildAdditionProblem({ max: 100, requireCarry: true, twoDigit: true });
+    assert.ok(p.a >= 10 && p.b >= 10, 'two-digit addends');
+    assert.equal((p.a % 10) + (p.b % 10) >= 10, true, 'units carry');
+    assert.equal(p.carry, 1);
+  }
+});
+
+test('additionChoices: 4 unique options including the correct sum', () => {
+  for (let i = 0; i < 200; i++) {
+    const sum = 1 + Math.floor(Math.random() * 100);
+    const ch = E.additionChoices(sum);
+    assert.equal(ch.length, 4);
+    assert.ok(ch.includes(sum), 'includes the answer');
+    assert.equal(new Set(ch).size, 4, 'all unique');
+    ch.forEach((v) => assert.ok(v >= 0 && v <= 199));
+  }
+});
+
 test('estimateMasteryDate needs a positive pace and projects forward', () => {
   const cards = E.buildFactSpace();
   cards.slice(0, 6).forEach((c) => { c.state = 'mastered'; });

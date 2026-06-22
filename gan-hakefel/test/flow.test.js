@@ -86,6 +86,28 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   bridge.go('celebrate', { title: 'עלית דרגה!', sub: 'מעולה', rank: bridge.ENGINE.rankForPct(0.5), then: 'home' });
   assert.ok(window.document.querySelector('.rank-up'), 'level-up celebration shows a rank badge');
 
+  // Practice centre: hub + all three activities render without throwing.
+  for (const route of ['practice_hub', 'practice_add_h', 'practice_add_v', 'practice_word']) {
+    bridge.go(route);
+    assert.ok(window.document.getElementById('app').innerHTML.length > 20, 'practice rendered: ' + route);
+    assert.equal(bridge.route().name, route);
+  }
+  // Vertical addition shows the column layout, and a correct entry is accepted.
+  bridge.go('practice_add_v');
+  const doc = window.document;
+  assert.ok(doc.querySelector('.vadd'), 'vertical addition shows the column layout');
+  const rows = [...doc.querySelectorAll('.vadd .vrow')]; // [carry, a, b, result]
+  const rowNum = (row) => Number([...row.querySelectorAll('span.cell')]
+    .map((c) => c.textContent.trim()).filter((s) => /^[0-9]$/.test(s)).join(''));
+  const a = rowNum(rows[1]), b = rowNum(rows[2]), sum = a + b;
+  doc.getElementById('ru').value = String(sum % 10);
+  doc.getElementById('rt').value = String(Math.floor(sum / 10) % 10);
+  if (sum >= 100) doc.getElementById('rh').value = '1';
+  if ((a % 10) + (b % 10) >= 10) doc.getElementById('cin').value = '1';
+  doc.getElementById('check').click();
+  assert.ok(doc.getElementById('fb').classList.contains('good'), 'a correct column sum is accepted');
+  bridge.go('home'); // clears the pending round-advance timer (FX.clearTimers)
+
   // Games hub + parent dashboard also render.
   bridge.go('games_hub');
   assert.ok(window.document.getElementById('app').innerHTML.length > 20, 'games hub rendered');

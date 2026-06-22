@@ -251,6 +251,19 @@
   .pill.risk-lapsed{background:#ffd9d9; color:#a11}
   .pill.risk-fragile{background:#ffe6c2; color:#8a4b00}
   .pill.risk-due_soon{background:#e7eefb; color:#2a4d8f}
+  /* vertical (column) addition */
+  .vadd{direction:ltr; display:inline-block; margin:8px auto; font-weight:900}
+  .vadd .vrow{display:flex; justify-content:flex-end; gap:8px; align-items:center; margin:2px 0}
+  .vadd .cell{width:1.5em; height:1.5em; font-size:30px; text-align:center; display:flex; align-items:center; justify-content:center}
+  .vadd .op{margin-inline-end:auto; color:var(--leaf-dark)}
+  .vadd input.cell{border:2px solid var(--leaf); border-radius:10px; background:#fff; font-weight:900; padding:0}
+  .vadd input.res{font-size:30px}
+  .vadd input.carry-in{width:1.1em; height:1.1em; font-size:17px; border:1px dashed #c0392b; color:#c0392b; border-radius:7px}
+  .vadd input.ghost{visibility:hidden}
+  .vadd .vline{border-top:3px solid #333; margin:3px 0}
+  .vadd input.cell.bad{border-color:var(--bad); background:#fff0f0}
+  .vadd input.cell.good{border-color:var(--good); background:#f0fff4}
+  .vadd .carry-row{min-height:1.2em}
   .hud{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:900}
   .hud-score{color:var(--sun-dark)} .hud-combo{color:#ff6a3d; min-height:1.4em}
   .hud-combo.pulse{animation:pop .35s ease}

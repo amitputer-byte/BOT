@@ -430,6 +430,54 @@ function estimateMasteryDate(cards, opts) {
   return { done: false, remaining: remaining, daysRemaining: days, date: now + days * DAY, perDay: perDay };
 }
 
+/* ============================================================================
+ * Addition practice (a separate activity from the multiplication mastery
+ * system). Pure generators so the content is deterministic under an injected
+ * RNG and fully testable.
+ * ==========================================================================*/
+
+/* A valid addition problem with sum <= max. opts:
+ *   rng (default Math.random), max (default 100), minSum (default 2),
+ *   requireCarry (units must carry), twoDigit (both addends >= 10).
+ * Returns { a, b, sum, carry } where carry is 1 when the units column carries. */
+function buildAdditionProblem(opts) {
+  opts = opts || {};
+  var rng = opts.rng || Math.random;
+  var max = opts.max || 100;
+  var minSum = opts.minSum || 2;
+  var requireCarry = !!opts.requireCarry;
+  var twoDigit = !!opts.twoDigit;
+  var lo = twoDigit ? 10 : 1;
+  var a = lo, b = lo, sum = lo + lo, guard = 0;
+  do {
+    a = lo + Math.floor(rng() * (max - lo));
+    b = lo + Math.floor(rng() * (max - lo));
+    sum = a + b;
+    guard++;
+  } while (guard < 300 && (
+    sum > max || sum < minSum ||
+    (requireCarry && ((a % 10) + (b % 10) < 10)) ||
+    (twoDigit && (a < 10 || b < 10))
+  ));
+  return { a: a, b: b, sum: sum, carry: ((a % 10) + (b % 10) >= 10) ? 1 : 0 };
+}
+
+/* Four answer options for an addition sum, with diagnostic distractors
+ * (forgot-to-carry = sum-10, extra-carry = sum+10, off-by-1/2). Pure given rng. */
+function additionChoices(sum, rng) {
+  rng = rng || Math.random;
+  function shuf(arr) {
+    for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(rng() * (i + 1)); var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+    return arr;
+  }
+  var set = {}; set[sum] = 1; var distract = [];
+  function add(x) { x = Math.round(x); if (x >= 0 && x <= 199 && !set[x]) { set[x] = 1; distract.push(x); } }
+  shuf([sum - 10, sum + 10, sum + 1, sum - 1, sum + 2, sum - 2]).forEach(add);
+  var picks = [sum].concat(distract.slice(0, 3));
+  var n = sum + 3; while (picks.length < 4) { if (n >= 0 && picks.indexOf(n) < 0) picks.push(n); n++; }
+  return shuf(picks);
+}
+
 var ENGINE = {
   DAY: DAY,
   INTERVAL_DAYS: INTERVAL_DAYS,
@@ -461,7 +509,9 @@ var ENGINE = {
   factsToNextStar: factsToNextStar,
   buildJourney: buildJourney,
   forecastAtRisk: forecastAtRisk,
-  estimateMasteryDate: estimateMasteryDate
+  estimateMasteryDate: estimateMasteryDate,
+  buildAdditionProblem: buildAdditionProblem,
+  additionChoices: additionChoices
 };
 
 export { ENGINE };
