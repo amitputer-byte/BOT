@@ -381,6 +381,55 @@ function buildJourney(cards) {
   });
 }
 
+/* ============================================================================
+ * Predictive helpers for the parent dashboard.
+ * ==========================================================================*/
+
+/* Facts most at risk of being forgotten, ranked. Reasons:
+ *   'lapsed'   — already slipped to at_risk
+ *   'fragile'  — practicing but shaky (low box / recent errors)
+ *   'due_soon' — strong/practicing whose review falls due within the horizon
+ * opts: { now, horizonMs (default 3 days), limit } */
+function forecastAtRisk(cards, opts) {
+  opts = opts || {};
+  var now = opts.now || Date.now();
+  var horizon = typeof opts.horizonMs === 'number' ? opts.horizonMs : 3 * DAY;
+  var out = [];
+  cards.forEach(function (c) {
+    if (c.state === 'new') return;
+    var score = 0, reason = null;
+    if (c.state === 'at_risk') { score = 100; reason = 'lapsed'; }
+    else if (c.consecErrors > 0 || (c.state === 'practicing' && c.box <= 1)) { score = 70; reason = 'fragile'; }
+    else if (c.nextDueAt <= now + horizon) {
+      var overdueDays = Math.max(0, (now - c.nextDueAt) / DAY);
+      score = 40 + Math.min(20, overdueDays);
+      reason = 'due_soon';
+    }
+    if (reason) {
+      out.push({ id: c.id, a: c.a, b: c.b, product: c.product, family: c.family,
+        state: c.state, reason: reason, score: score, nextDueAt: c.nextDueAt });
+    }
+  });
+  out.sort(function (x, y) { return y.score - x.score || x.nextDueAt - y.nextDueAt; });
+  return opts.limit ? out.slice(0, opts.limit) : out;
+}
+
+/* Estimate when the whole fact space will be mastered, given a mastery pace.
+ * opts: { now, perDay } where perDay = facts newly mastered per day (>0).
+ * Returns null when there is not enough signal (perDay <= 0). */
+function estimateMasteryDate(cards, opts) {
+  opts = opts || {};
+  var now = opts.now || Date.now();
+  var total = cards.length;
+  var mastered = cards.filter(function (c) { return c.state === 'mastered'; }).length;
+  var remaining = total - mastered;
+  if (remaining <= 0) return { done: true, remaining: 0, daysRemaining: 0, date: now, perDay: opts.perDay || 0 };
+  var perDay = opts.perDay || 0;
+  if (perDay <= 0) return null;
+  var days = Math.ceil(remaining / perDay);
+  return { done: false, remaining: remaining, daysRemaining: days, date: now + days * DAY, perDay: perDay };
+}
+
 var ENGINE = {
   DAY: DAY,
   INTERVAL_DAYS: INTERVAL_DAYS,
@@ -410,7 +459,9 @@ var ENGINE = {
   rankForCards: rankForCards,
   familyStars: familyStars,
   factsToNextStar: factsToNextStar,
-  buildJourney: buildJourney
+  buildJourney: buildJourney,
+  forecastAtRisk: forecastAtRisk,
+  estimateMasteryDate: estimateMasteryDate
 };
 
 export { ENGINE };

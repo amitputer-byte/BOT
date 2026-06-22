@@ -45,7 +45,16 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
     stats: { sessionsCompleted: 1, totalTimeMs: 1000, lastSessionAt: 0, gamesPlayed: 0, arraysCorrect: 0, errorTags: {} },
     history: [], log: []
   };
-  Storage.createProfile({ name: 'תמרי', avatar: '👑' }, ready);
+  const tamari = Storage.createProfile({ name: 'תמרי', avatar: '👑' }, ready);
+  // A second profile so the parent dashboard's comparison card appears.
+  Storage.createProfile({ name: 'דני', avatar: '🦊' }, {
+    version: 2, consentGiven: true, baselineDone: true,
+    child: { nickname: 'דני', avatar: '🦊', accessories: [] },
+    settings: ready.settings, cards: E.buildFactSpace(),
+    rewards: { stars: 0, unlocked: [], badges: [], bossDone: [], decor: [], accessories: [], chests: 0, chestProgress: 0, rankSeen: 0 },
+    collection: { pets: {} }, garden: { placed: [] }, streak: ready.streak, stats: ready.stats, history: [], log: []
+  });
+  Storage.setActiveProfileId(tamari.id); // boot loads תמרי
 
   // Boot the app.
   await import('../src/app.js');
@@ -81,7 +90,10 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   bridge.go('games_hub');
   assert.ok(window.document.getElementById('app').innerHTML.length > 20, 'games hub rendered');
   bridge.go('parent_dash');
-  assert.ok(window.document.getElementById('app').innerHTML.length > 20, 'parent dashboard rendered');
+  const dash = window.document.getElementById('app').innerHTML;
+  assert.ok(dash.includes('עובדות בסיכון'), 'dashboard shows the at-risk forecast');
+  assert.ok(dash.includes('תחזית שליטה'), 'dashboard shows the mastery-date forecast');
+  assert.ok(dash.includes('השוואת פרופילים'), 'dashboard shows the profile comparison');
 });
 
 test('fresh boot (no data) shows onboarding, not a game', async () => {

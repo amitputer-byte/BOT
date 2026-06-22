@@ -79,3 +79,35 @@ test('buildJourney describes every family in order', () => {
     assert.ok(node.stars >= 0 && node.stars <= 3);
   }
 });
+
+test('forecastAtRisk ranks lapsed > fragile > due_soon', () => {
+  const now = 10 * E.DAY;
+  const cards = E.buildFactSpace();
+  const lapsed = cards[0]; lapsed.state = 'at_risk'; lapsed.nextDueAt = now - E.DAY;
+  const fragile = cards[1]; fragile.state = 'practicing'; fragile.box = 1; fragile.nextDueAt = now + 5 * E.DAY;
+  const dueSoon = cards[2]; dueSoon.state = 'strong'; dueSoon.box = 3; dueSoon.nextDueAt = now + E.DAY;
+  const safe = cards[3]; safe.state = 'mastered'; safe.box = 5; safe.nextDueAt = now + 20 * E.DAY;
+
+  const risk = E.forecastAtRisk(cards, { now });
+  const ids = risk.map((r) => r.id);
+  assert.equal(risk[0].id, lapsed.id);
+  assert.equal(risk[0].reason, 'lapsed');
+  assert.ok(ids.indexOf(fragile.id) < ids.indexOf(dueSoon.id), 'fragile outranks due_soon');
+  assert.ok(ids.indexOf(safe.id) === -1, 'a comfortably-scheduled mastered fact is not at risk');
+  // limit is respected
+  assert.equal(E.forecastAtRisk(cards, { now, limit: 1 }).length, 1);
+});
+
+test('estimateMasteryDate needs a positive pace and projects forward', () => {
+  const cards = E.buildFactSpace();
+  cards.slice(0, 6).forEach((c) => { c.state = 'mastered'; });
+  const now = 1_000_000_000;
+  assert.equal(E.estimateMasteryDate(cards, { now, perDay: 0 }), null);
+  const est = E.estimateMasteryDate(cards, { now, perDay: 2 });
+  assert.equal(est.remaining, 60);
+  assert.equal(est.daysRemaining, 30);
+  assert.equal(est.date, now + 30 * E.DAY);
+  // all mastered => done
+  cards.forEach((c) => { c.state = 'mastered'; });
+  assert.equal(E.estimateMasteryDate(cards, { now, perDay: 1 }).done, true);
+});

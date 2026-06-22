@@ -1791,13 +1791,40 @@ import * as Storage from "./storage.js";
 
   /* ============================== PARENT DASHBOARD ============================== */
   function stateClass(s) { return 's-' + s; }
+  var RISK_LABEL = { lapsed: 'נשכחה', fragile: 'שברירית', due_soon: 'לחזרה בקרוב' };
+  function formatDateHe(ts) { var d = new Date(ts); return d.getDate() + '.' + (d.getMonth() + 1) + '.' + d.getFullYear(); }
+  /* Newly-mastered facts per day, from the recent mastery trend in history. */
+  function masteryPerDay() {
+    var h = (S.history || []).filter(function (e) { return typeof e.masteryPct === 'number' && e.ts; });
+    if (h.length < 2) return 0;
+    var recent = h.slice(-10);
+    var first = recent[0], last = recent[recent.length - 1];
+    var days = Math.max(1, (last.ts - first.ts) / E.DAY);
+    var gained = (last.masteryPct - first.masteryPct) * S.cards.length;
+    return gained > 0 ? gained / days : 0;
+  }
+  /* Per-profile mastery summary for the comparison card (null if <2 profiles). */
+  function profilesComparison() {
+    var list = Storage.listProfiles();
+    if (list.length < 2) return null;
+    return list.map(function (p) {
+      var st = (p.id === activeProfileId) ? S : Storage.loadProfileState(p.id);
+      var cards = (st && Array.isArray(st.cards)) ? st.cards : [];
+      var kk = cards.length ? E.computeKpis(cards) : { masteryPct: 0, masteredCount: 0, totalFacts: 0 };
+      var rk = E.rankForPct(kk.masteryPct);
+      return { id: p.id, name: p.name, avatar: p.avatar, masteryPct: kk.masteryPct,
+        mastered: kk.masteredCount, rank: rk, active: p.id === activeProfileId };
+    }).sort(function (a, b) { return b.masteryPct - a.masteryPct; });
+  }
   function renderParentDashboard() {
     logEvent(EV.parent_dashboard_viewed, {});
+    var now = Date.now();
     var k = E.computeKpis(S.cards);
-    var due = S.cards.filter(function (c) { return c.state !== 'new' && c.nextDueAt <= Date.now(); });
-    var fragile = S.cards.filter(function (c) { return c.state === 'at_risk' || (c.state === 'practicing' && c.box <= 1); });
     var rec = E.recommendNextAction(S.cards);
     var mins = Math.round(S.stats.totalTimeMs / 60000);
+    var risk = E.forecastAtRisk(S.cards, { now: now, limit: 8 });
+    var est = E.estimateMasteryDate(S.cards, { now: now, perDay: masteryPerDay() });
+    var cmp = profilesComparison();
 
     // heatmap rows a=0..10, cols b=0..10
     var heat = '<div class="heat"><span class="h lbl">×</span>';
@@ -1837,11 +1864,30 @@ import * as Storage from "./storage.js";
       kpi(S.streak.days.length + '/5', 'ימי רצף השבוע') +
       '</div></div>' +
 
-      '<div class="card"><h3>עובדות שבריריות / לחזרה היום</h3>' +
-      (fragile.length || due.length ?
-        '<p>' + uniqueIds(fragile.concat(due)).slice(0, 18).map(function (id) { return '<span class="pill" style="margin:3px;font-size:14px"><span class="mexpr">' + id + '</span></span>'; }).join('') + '</p>'
+      '<div class="card"><h3>🔮 עובדות בסיכון</h3>' +
+      (risk.length ?
+        '<p class="muted">' + risk.length + ' עובדות בסיכון להישכח — סבב חזרה קצר ימנע נסיגה.</p>' +
+        '<div>' + risk.map(function (r) {
+          return '<span class="pill risk-' + r.reason + '" style="margin:3px;font-size:14px"><span class="mexpr">' + r.id + '</span> · ' + RISK_LABEL[r.reason] + '</span>';
+        }).join('') + '</div>'
         : '<p class="muted">אין כרגע עובדות בסיכון 🎉</p>') +
       '</div>' +
+
+      '<div class="card"><h3>📅 תחזית שליטה מלאה</h3>' +
+      (k.masteredCount >= k.totalFacts ? '<p style="font-weight:700">כל הכפל בשליטה מלאה! 🏆</p>'
+        : est ? '<p style="font-weight:700">בקצב הנוכחי — שליטה מלאה בעוד כ-' + est.daysRemaining + ' ימים (בערך ' + formatDateHe(est.date) + ').</p>' +
+          '<small class="muted">לפי קצב של ' + est.perDay.toFixed(1) + ' עובדות חדשות בשליטה ביום. עוד ' + est.remaining + ' עובדות.</small>'
+        : '<p class="muted">עוד אין מספיק נתונים לתחזית — עוד כמה סבבי תרגול והיא תופיע.</p>') +
+      '</div>' +
+
+      (cmp ? '<div class="card"><h3>👥 השוואת פרופילים</h3>' +
+        cmp.map(function (p) {
+          return '<div class="row between" style="margin-top:8px"><span>' + escapeHtml(p.avatar || '👑') + ' ' + escapeHtml(p.name) +
+            (p.active ? ' <small class="muted">(פעיל)</small>' : '') + ' · ' + p.rank.emoji + ' ' + p.rank.name +
+            '</span><span class="num" style="font-weight:800">' + Math.round(p.masteryPct * 100) + '%</span></div>' +
+            '<div class="progress" style="margin-top:3px"><i style="width:' + Math.max(3, Math.round(p.masteryPct * 100)) + '%"></i></div>';
+        }).join('') +
+        '</div>' : '') +
 
       '<div class="card"><h3>מגמה לאורך זמן</h3>' + trendsHTML() + '</div>' +
 
