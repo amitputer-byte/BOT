@@ -27,13 +27,17 @@ import * as Storage from "./storage.js";
     return {
       version: 2, consentGiven: false, baselineDone: false,
       child: { nickname: 'תמרי', avatar: '👑', accessories: [] },
-      settings: { sound: true, music: false, zen: false, haptics: true, reducedMotion: false, analytics: true, localOnly: true, sessionLength: 8, freeEntry: true },
+      settings: { sound: true, music: false, zen: false, haptics: true, reducedMotion: false, analytics: true, localOnly: true, sessionLength: 8, freeEntry: true, theme: 'auto' },
       cards: E.buildFactSpace(),
       rewards: { stars: 0, unlocked: [], badges: [], bossDone: [], decor: [], accessories: [], chests: 0, chestProgress: 0, rankSeen: 0 },
-      collection: { pets: {} },
+      collection: { pets: {}, buddy: null },
       garden: { placed: [] },
       streak: { weekKey: weekKeyOf(Date.now()), days: [], shield: true },
       stats: { sessionsCompleted: 0, totalTimeMs: 0, lastSessionAt: 0, gamesPlayed: 0, arraysCorrect: 0, errorTags: {}, practice: { addCorrect: 0, addTotal: 0, wordCorrect: 0, wordTotal: 0 } },
+      daily: { dateKey: '', correct: 0, sessions: 0, goalMet: false },
+      login: { lastDateKey: '', streakDays: 0, weekStamps: [] },
+      weekly: { weekKey: '', progress: 0, done: false },
+      records: { bestSessionCorrect: 0, bestGameScore: 0 },
       history: [],
       log: []
     };
@@ -62,8 +66,9 @@ import * as Storage from "./storage.js";
     if (typeof s.rewards.rankSeen !== 'number') {
       try { s.rewards.rankSeen = E.rankForCards(s.cards).index; } catch (e) { s.rewards.rankSeen = 0; }
     }
-    s.collection = Object.assign({ pets: {} }, s.collection || {});
+    s.collection = Object.assign({ pets: {}, buddy: null }, s.collection || {});
     if (!s.collection.pets || typeof s.collection.pets !== 'object') s.collection.pets = {};
+    if (!('buddy' in s.collection)) s.collection.buddy = null;
     s.garden = Object.assign({ placed: [] }, s.garden || {});
     if (!Array.isArray(s.garden.placed)) s.garden.placed = [];
     s.stats = Object.assign({}, d.stats, s.stats || {});
@@ -72,6 +77,11 @@ import * as Storage from "./storage.js";
     if (!Array.isArray(s.history)) s.history = [];
     if (!Array.isArray(s.log)) s.log = [];
     s.streak = Object.assign({}, d.streak, s.streak || {});
+    s.daily = Object.assign({ dateKey: '', correct: 0, sessions: 0, goalMet: false }, s.daily || {});
+    s.login = Object.assign({ lastDateKey: '', streakDays: 0, weekStamps: [] }, s.login || {});
+    if (!Array.isArray(s.login.weekStamps)) s.login.weekStamps = [];
+    s.weekly = Object.assign({ weekKey: '', progress: 0, done: false }, s.weekly || {});
+    s.records = Object.assign({ bestSessionCorrect: 0, bestGameScore: 0 }, s.records || {});
     s.schemaVersion = Storage.SCHEMA_VERSION;
     return s;
   }
@@ -117,6 +127,18 @@ import * as Storage from "./storage.js";
     var reduce = S.settings.reducedMotion ||
       (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
     document.body.classList.toggle('reduced', !!reduce);
+  }
+  /* Living world + seasonal theming: set a theme on <html> (auto = by season)
+   * and a day/night flag by the clock. Cheap, persists across re-renders. */
+  function applyTheme() {
+    try {
+      var root = document.documentElement;
+      var pref = (S.settings && S.settings.theme) || 'auto';
+      var theme = (pref === 'auto') ? E.seasonalTheme(new Date().getMonth()) : pref;
+      root.setAttribute('data-theme', theme);
+      var hr = new Date().getHours();
+      root.setAttribute('data-time', (hr >= 6 && hr < 18) ? 'day' : 'night');
+    } catch (e) {}
   }
 
   /* ============================== FX ENGINE (sound + juice, offline, asset-free) ==============================
@@ -355,6 +377,52 @@ import * as Storage from "./storage.js";
     if (n <= 0) return; S.rewards.stars += n;
     logEvent(EV.reward_earned, { amount: n, reason: reason });
   }
+  /* ---------- engagement: daily goal, weekly challenge, records ---------- */
+  var DAILY_GOAL = E.DAILY_GOAL_DEFAULT;
+  /* Count progress toward today's goal. Resets at a new day. Returns true the
+   * moment the goal is first met today (so the caller can celebrate). */
+  function bumpDaily(correctDelta, sessionDelta) {
+    var dk = todayKey();
+    if (S.daily.dateKey !== dk) { S.daily = { dateKey: dk, correct: 0, sessions: 0, goalMet: false }; }
+    S.daily.correct += (correctDelta || 0);
+    S.daily.sessions += (sessionDelta || 0);
+    var justMet = false;
+    if (!S.daily.goalMet && S.daily.correct >= DAILY_GOAL) { S.daily.goalMet = true; justMet = true; awardStars(5, 'daily_goal'); }
+    return justMet;
+  }
+  /* Advance the rotating weekly challenge. Resets at a new week. Returns true
+   * the moment the challenge is completed (caller celebrates + rewards). */
+  function bumpWeekly(kind, n) {
+    var wk = weekKeyOf(Date.now());
+    var ch = E.pickWeeklyChallenge(wk);
+    if (S.weekly.weekKey !== wk) { S.weekly = { weekKey: wk, progress: 0, done: false }; }
+    if (ch.kind !== kind || S.weekly.done) return false;
+    S.weekly.progress += (n || 1);
+    if (S.weekly.progress >= ch.target) { S.weekly.done = true; awardStars(15, 'weekly:' + ch.id); return true; }
+    return false;
+  }
+  function setRecord(key, value) {
+    if (!S.records) S.records = { bestSessionCorrect: 0, bestGameScore: 0 };
+    if ((value || 0) > (S.records[key] || 0)) { S.records[key] = value; return true; }
+    return false;
+  }
+  /* Daily login streak + reward. Returns true the first time today, so boot can
+   * show the daily-gift calendar. */
+  function checkLogin() {
+    var dk = todayKey();
+    if (S.login.lastDateKey === dk) return false;
+    var y = new Date(); y.setDate(y.getDate() - 1);
+    var yKey = y.getFullYear() + '-' + (y.getMonth() + 1) + '-' + y.getDate();
+    S.login.streakDays = (S.login.lastDateKey === yKey) ? (S.login.streakDays || 0) + 1 : 1;
+    S.login.lastDateKey = dk;
+    S.login.weekStamps = (S.login.weekStamps || []).concat([dk]).slice(-7);
+    var reward = E.loginRewardForDay(S.login.streakDays);
+    S.login.lastReward = reward;
+    if (reward > 0) awardStars(reward, 'login_day:' + S.login.streakDays);
+    save();
+    return true;
+  }
+
   /* If the player's champion rank just went up, record it and return the new
    * rank (so the caller can celebrate the level-up). Otherwise null. */
   function popLevelUp() {
@@ -405,6 +473,9 @@ import * as Storage from "./storage.js";
     if (after.state === 'at_risk' && before.state !== 'at_risk') logEvent(EV.lapse_detected, { fact: cardId });
     if (opts.correct) awardStars(opts.usedHint ? 1 : 2, 'answer');
     if (after.state === 'mastered' && before.state !== 'mastered') awardStars(5, 'mastery');
+    // engagement tracking
+    if (opts.correct) { bumpDaily(1, 0); bumpWeekly('correct', 1); }
+    if (after.state === 'mastered' && before.state !== 'mastered') bumpWeekly('mastered', 1);
     checkBadges(); save();
     return { before: before, after: after };
   }
@@ -437,6 +508,7 @@ import * as Storage from "./storage.js";
       case 'home': return renderHome();
       case 'session': return renderSessionRunner();
       case 'celebrate': return renderCelebration(route.params);
+      case 'daily_gift': return renderDailyGift();
       case 'game_arrays': return renderArraysGame();
       case 'game_train': return renderTrainGame();
       case 'game_balloons': return renderBalloonGame();
@@ -456,6 +528,8 @@ import * as Storage from "./storage.js";
       case 'shop': return renderShop();
       case 'garden_builder': return renderGardenBuilder();
       case 'world_map': return renderWorldMap();
+      case 'land_story': return renderLandStory(route.params.fam);
+      case 'trophies': return renderTrophies();
       case 'parent_gate': return renderParentGate(route.params.then || 'parent_dash');
       case 'parent_dash': return renderParentDashboard();
       case 'parent_settings': return renderSettings();
@@ -862,6 +936,7 @@ import * as Storage from "./storage.js";
     }
     S.stats.sessionsCompleted++; S.stats.totalTimeMs += dt; S.stats.lastSessionAt = Date.now();
     updateStreakOnSession();
+    bumpDaily(0, 1); bumpWeekly('sessions', 1); setRecord('bestSessionCorrect', correct);
     if (S.stats.sessionsCompleted === 1) giveBadge('first_lesson');
     checkBadges(); recordHistory(); bumpChest(1); save();
     logEvent(mode === 'review' ? EV.review_completed : EV.lesson_completed, { correct: correct, total: total, ms: dt, boss: bossFam || undefined });
@@ -939,6 +1014,29 @@ import * as Storage from "./storage.js";
     }
   }
 
+  /* Daily-gift calendar shown once per day on the first open. */
+  function renderDailyGift() {
+    var day = S.login.streakDays || 1;
+    var reward = (typeof S.login.lastReward === 'number') ? S.login.lastReward : E.loginRewardForDay(day);
+    var cyclePos = ((day - 1) % 7) + 1;
+    var cells = '';
+    for (var i = 1; i <= 7; i++) {
+      var cls = 'gift-cell' + (i < cyclePos ? ' got' : '') + (i === cyclePos ? ' today' : '');
+      cells += '<div class="' + cls + '"><small>יום ' + i + '</small><span class="gc-em">' + (i <= cyclePos ? '⭐' : '🎁') + '</span><b>' + E.loginRewardForDay(i) + '</b></div>';
+    }
+    app.innerHTML = '<div class="screen center">' +
+      '<div class="stars-burst">🎁✨🎁</div>' +
+      '<div class="card levelup">' +
+      '<h1>מתנת היומית! 🎁</h1>' +
+      '<p class="muted">' + escapeHtml(NAME()) + ', התחברת ' + day + ' ימים ברצף — קבלי <b>' + reward + ' ⭐</b>!</p>' +
+      '<div class="gift-row">' + cells + '</div>' +
+      '<button class="btn btn-primary" id="claim">קחי את המתנה</button>' +
+      '</div></div>';
+    speak('מתנה יומית! קיבלת ' + reward + ' כוכבים.');
+    try { FX.sfx('win'); confettiRain(50); } catch (e) {}
+    bindBtn('claim', function () { go('home'); });
+  }
+
   /* ============================== HOME ============================== */
   function renderHome() {
     logEvent(EV.app_open, {});
@@ -971,12 +1069,26 @@ import * as Storage from "./storage.js";
     var petGlyphs = Object.keys(S.collection.pets || {}).map(function (key) { var st = S.collection.pets[key].stage || 0; return st >= 2 ? key : ['🥚', '🐣', key][st]; });
     var gardenMini = (S.garden.placed || []).slice(0, 14).map(function (pl) { return pl.key; }).join(' ');
 
+    // engagement: daily goal, streak flame, weekly challenge, buddy
+    var todayK = todayKey();
+    var dailyCorrect = (S.daily.dateKey === todayK) ? S.daily.correct : 0;
+    var goalPct = Math.min(100, Math.round(dailyCorrect / DAILY_GOAL * 100));
+    var streakFlame = S.streak.days.length;
+    var wk = weekKeyOf(Date.now());
+    var ch = E.pickWeeklyChallenge(wk);
+    var wprog = (S.weekly.weekKey === wk) ? S.weekly.progress : 0;
+    var wdone = (S.weekly.weekKey === wk) ? S.weekly.done : false;
+    var wpct = Math.min(100, Math.round(wprog / ch.target * 100));
+    var buddyKey = S.collection.buddy;
+
     app.innerHTML = '<div class="screen">' + topbar(true) +
       '<div class="card" style="background:linear-gradient(135deg,#ffffff,#fff7d9);border:2px solid var(--sun)">' +
       '<div style="display:flex;align-items:center;gap:14px">' +
       '<div style="font-size:54px;position:relative">' + S.child.avatar + (accHtml ? '<div style="position:absolute;top:-6px;inset-inline-end:-8px;display:flex;gap:2px">' + accHtml + '</div>' : '') + '</div>' +
       '<div style="flex:1"><h2 style="margin:0">👑 ' + escapeHtml(NAME()) + ' אלופת העולם</h2>' +
-      '<small class="muted">' + cheer(CHAMP.affirm) + '</small></div></div>' +
+      '<small class="muted">' + cheer(CHAMP.affirm) + '</small>' +
+      (buddyKey ? '<div class="buddy-line"><span class="buddy-glyph">' + buddyGlyph(buddyKey) + '</span> <span class="muted">' + buddyReaction(dailyCorrect) + '</span></div>' : '') +
+      '</div></div>' +
       '<div style="margin-top:12px">' +
       '<div class="rank-chip"><span class="rc-emoji">' + rank.emoji + '</span>' +
       '<div style="flex:1"><b>דרגה: ' + rank.name + '</b>' +
@@ -987,6 +1099,18 @@ import * as Storage from "./storage.js";
       '</div></div>' +
       '<small class="muted" style="display:block;margin-top:6px">היעד הבא בלימוד: ' + nextLabel +
       ' · ' + Math.round(k.masteryPct * 100) + '% מהכפל בשליטה</small></div></div>' +
+
+      '<div class="card daily-card"><div class="row between"><h3 style="margin:0">🎯 היעד היומי</h3>' +
+      '<span class="flame' + (streakFlame > 0 ? ' lit' : '') + '">🔥 <span class="num">' + streakFlame + '</span><small>/5</small></span></div>' +
+      '<div class="goal-wrap">' + ringSVG(goalPct, dailyCorrect + '/' + DAILY_GOAL) +
+      '<div><b>' + dailyCorrect + ' מתוך ' + DAILY_GOAL + ' תשובות נכונות היום</b><br>' +
+      '<small class="muted">' + (S.daily.goalMet ? 'היעד הושג, אלופה! 🌟 +5⭐' : 'עוד ' + Math.max(0, DAILY_GOAL - dailyCorrect) + ' להשלמת היעד') + '</small></div>' +
+      '</div></div>' +
+
+      '<div class="card"><div class="row between"><h3 style="margin:0">' + ch.emoji + ' אתגר השבוע</h3>' + (wdone ? '<span class="pill">✅ הושלם</span>' : '') + '</div>' +
+      '<p class="muted" style="margin:4px 0">' + ch.label + '</p>' +
+      '<div class="progress"><i style="width:' + Math.max(3, wpct) + '%"></i></div>' +
+      '<small class="muted">' + Math.min(wprog, ch.target) + '/' + ch.target + ' · שיא אישי בסבב: ' + (S.records.bestSessionCorrect || 0) + ' נכון</small></div>' +
 
       (S.rewards.chests > 0 ? '<div class="card" style="background:linear-gradient(135deg,#fff,#ffe9c9);border:2px solid var(--sun-dark)"><div class="row between"><h3 style="margin:0">🎁 יש לך תיבת אוצר!</h3><button class="btn btn-sun btn-sm" id="homeChest" style="width:auto">פתחי (' + S.rewards.chests + ')</button></div></div>' : '') +
 
@@ -1015,6 +1139,9 @@ import * as Storage from "./storage.js";
       '<p class="muted">חיבור עד 100 (במאוזן ובמאונך) ושאלות מילוליות — כפל וחיבור.</p>' +
       '<button class="btn btn-soft" id="toPractice">📝 לתרגול</button></div>' +
 
+      '<div class="card"><div class="row between"><h3 style="margin:0">🏆 חדר הגביעים</h3><button class="btn btn-soft btn-sm" id="toTrophies" style="width:auto">לחדר</button></div>' +
+      '<p class="muted">תגים, כתרים, אוספים והבן-לוויה שלך.</p></div>' +
+
       '<div class="card"><div class="row between"><h3 style="margin:0">🗺️ המסע שלי</h3><button class="btn btn-soft btn-sm" id="toMap" style="width:auto">למפה</button></div>' +
       '<div class="map">' + familyNodes + '</div></div>' +
       '</div>';
@@ -1028,6 +1155,7 @@ import * as Storage from "./storage.js";
     if (bossFam) bindBtn('boss', function () { startBoss(bossFam); });
     bindBtn('toGames', function () { go('games_hub'); });
     bindBtn('toPractice', function () { go('practice_hub'); });
+    bindBtn('toTrophies', function () { go('trophies'); });
     document.getElementById('toParent').onclick = function () { go('parent_gate', { then: 'parent_dash' }); };
   }
   function bindBtn(id, fn) {
@@ -1039,6 +1167,20 @@ import * as Storage from "./storage.js";
     var s = '';
     for (var i = 0; i < 3; i++) s += '<span class="' + (i < filled ? '' : 'off') + '">★</span>';
     return '<span class="stars" aria-label="' + filled + ' מתוך 3 כוכבים">' + s + '</span>';
+  }
+  function ringSVG(pct, label) {
+    var r = 26, c = 2 * Math.PI * r, off = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+    return '<svg class="goal-ring" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">' +
+      '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="#e7eee7" stroke-width="7"/>' +
+      '<circle cx="32" cy="32" r="' + r + '" fill="none" stroke="var(--leaf)" stroke-width="7" stroke-linecap="round" stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '" transform="rotate(-90 32 32)"/>' +
+      '<text x="32" y="37" text-anchor="middle" font-size="14" font-weight="800" fill="var(--leaf-dark)">' + label + '</text></svg>';
+  }
+  function buddyGlyph(key) { return petGlyph(key) || key; }
+  function buddyReaction(correct) {
+    var bank = correct >= DAILY_GOAL ? ['וואו, השלמת את היעד! 🎉', 'את אלופה אמיתית!']
+      : correct > 0 ? ['יאללה, ממשיכים!', 'כל הכבוד, עוד קצת!', 'אני גאה בך!']
+        : ['בואי נתרגל היום יחד!', 'מוכנה למשימה? קדימה!'];
+    return pick(bank);
   }
 
   function startBoss(fam) {
@@ -1553,7 +1695,7 @@ import * as Storage from "./storage.js";
   }
 
   function finishGame(name) {
-    S.stats.gamesPlayed++; bumpChest(1); checkBadges(); save();
+    S.stats.gamesPlayed++; bumpChest(1); bumpWeekly('games', 1); setRecord('bestGameScore', run ? (run.score || 0) : 0); checkBadges(); save();
     logEvent(EV.game_completed, { game: name, correct: run ? run.correct : 0, score: run ? run.score : 0 });
     var earned = S.rewards.stars - (run ? run.stars0 : S.rewards.stars);
     var score = run ? (run.score || 0) : 0;
@@ -1573,11 +1715,12 @@ import * as Storage from "./storage.js";
     var pr = practiceStats();
     var key = (kind === 'word') ? 'word' : 'add';
     pr[key + 'Total']++;
-    if (correct) { pr[key + 'Correct']++; awardStars(1, 'practice:' + kind); }
+    if (correct) { pr[key + 'Correct']++; awardStars(1, 'practice:' + kind); bumpDaily(1, 0); }
+    bumpWeekly('practice', 1);
     save();
   }
   function finishPractice(name) {
-    S.stats.gamesPlayed++; save();
+    S.stats.gamesPlayed++; bumpWeekly('games', 1); setRecord('bestGameScore', run ? (run.score || 0) : 0); save();
     logEvent(EV.game_completed, { game: name });
     var earned = S.rewards.stars - (run ? run.stars0 : S.rewards.stars);
     var score = run ? (run.score || 0) : 0;
@@ -1924,11 +2067,16 @@ import * as Storage from "./storage.js";
 
   /* ============================== WORLD MAP (champion journey) ============================== */
   var LANDS = [
-    { fam: 'zeros', name: 'שער ההתחלה', emoji: '🌅' }, { fam: 'ones', name: 'גבעת האחד', emoji: '🌄' },
-    { fam: 'twos', name: 'יער הזוגות', emoji: '🌳' }, { fam: 'tens', name: 'מפל העשרות', emoji: '💧' },
-    { fam: 'fives', name: 'חוף החמישות', emoji: '🏖️' }, { fam: 'fours', name: 'מערת הארבעות', emoji: '🪨' },
-    { fam: 'threes', name: 'גן השלושות', emoji: '🌸' }, { fam: 'sixes', name: 'הר השישות', emoji: '⛰️' },
-    { fam: 'nines', name: 'חלל התשעות', emoji: '🪐' }, { fam: 'hard', name: 'טירת האלופה', emoji: '🏰' }
+    { fam: 'zeros', name: 'שער ההתחלה', emoji: '🌅', story: 'שועלי פותח את שער הגן עם הזריחה. כאן הכול מתחיל — קסם האפס!' },
+    { fam: 'ones', name: 'גבעת האחד', emoji: '🌄', story: 'על הגבעה גר ינשוף חכם שמלמד: כל דבר כפול אחד נשאר הוא עצמו.' },
+    { fam: 'twos', name: 'יער הזוגות', emoji: '🌳', story: 'ביער הזוגות כל חיה מהלכת בזוגות. בואי נספור פעמיים-פעמיים!' },
+    { fam: 'tens', name: 'מפל העשרות', emoji: '💧', story: 'המפל שופע עשרות נוצצות. סוד: רק מוסיפים אפס בסוף!' },
+    { fam: 'fives', name: 'חוף החמישות', emoji: '🏖️', story: 'על החוף קופצים בחמישיות על אבני הסלע: 5, 10, 15...' },
+    { fam: 'fours', name: 'מערת הארבעות', emoji: '🪨', story: 'במערה מהדהד טריק הקסם: כפול-כפול! פעמיים כפול 2.' },
+    { fam: 'threes', name: 'גן השלושות', emoji: '🌸', story: 'בגן פורחים פרחים בני שלושה עלים. כל קבוצה — עוד שלוש.' },
+    { fam: 'sixes', name: 'הר השישות', emoji: '⛰️', story: 'מטפסים על ההר בקבוצות של שש. אמיצה — את כבר בדרך לפסגה!' },
+    { fam: 'nines', name: 'חלל התשעות', emoji: '🪐', story: 'בחלל התשעות יש טריק כוכבי: כפול עשר, ואז מורידים את המספר.' },
+    { fam: 'hard', name: 'טירת האלופה', emoji: '🏰', story: 'בטירה ממתינים האתגרים הקשים. רק אלופות אמיתיות מגיעות לכאן!' }
   ];
   function renderWorldMap() {
     app.innerHTML = '<div class="screen">' + topbar(true) +
@@ -1961,9 +2109,26 @@ import * as Storage from "./storage.js";
         if (b.getAttribute('data-unlocked') !== '1') { FX.sfx('wrong'); return; }
         var fam = b.getAttribute('data-fam');
         if (E.familyReadyForBoss(S.cards, fam) && S.rewards.bossDone.indexOf(fam) < 0) return startBoss(fam);
-        startFamilySession(fam);
+        go('land_story', { fam: fam });
       };
     });
+  }
+  /* Short narrative cutscene before entering a land — the "adventure" framing. */
+  function renderLandStory(fam) {
+    var land = null;
+    for (var i = 0; i < LANDS.length; i++) if (LANDS[i].fam === fam) { land = LANDS[i]; break; }
+    if (!land) return startFamilySession(fam);
+    app.innerHTML = '<div class="screen center">' + FOX() +
+      '<div class="card">' +
+      '<div style="font-size:56px;text-align:center">' + land.emoji + '</div>' +
+      '<h2 class="center" style="margin:4px 0">' + land.name + '</h2>' +
+      '<p style="font-size:18px;line-height:1.6;text-align:center">' + land.story + '</p>' +
+      '<button class="btn btn-primary" id="goLand">קדימה להרפתקה! 🚀</button>' +
+      '<button class="link" id="backMap">חזרה למפה</button>' +
+      '</div></div>';
+    speak(land.name + '. ' + land.story);
+    bindBtn('goLand', function () { startFamilySession(fam); });
+    bindBtn('backMap', function () { go('world_map'); });
   }
   function startFamilySession(fam) {
     var pool = S.cards.filter(function (c) { return c.family === fam; });
@@ -1977,6 +2142,65 @@ import * as Storage from "./storage.js";
     run = { mode: 'daily', items: items, i: 0, correct: 0, stars0: S.rewards.stars, t0: Date.now(), consecWrong: 0, fastCorrect: 0, eased: false, boosted: false, endNow: false };
     logEvent(EV.lesson_started, { count: items.length, family: fam });
     go('session');
+  }
+
+  /* ============================== TROPHY ROOM (collection · sets · buddy) ============================== */
+  var SETS = [
+    { id: 'pets', name: 'חיות מחמד', emoji: '🐾', items: ['🐰', '🐥', '🐢', '🐱', '🦄'] },
+    { id: 'garden', name: 'גן פורח', emoji: '🌻', items: ['🌷', '🍄', '🦋', '🌻', '🪑', '🌳', '🌈', '⛲'] },
+    { id: 'style', name: 'סטייל אלופה', emoji: '🎀', items: ['🎀', '🕶️', '🧣', '🎩', '✨'] }
+  ];
+  function setOwned(set) {
+    if (set.id === 'pets') return Object.keys(S.collection.pets || {});
+    if (set.id === 'garden') return S.rewards.decor || [];
+    if (set.id === 'style') return S.rewards.accessories || [];
+    return [];
+  }
+  function renderTrophies() {
+    var crowns = (S.rewards.bossDone || []).map(function (f) { return '👑 ' + E.FAMILY_LABEL[f]; });
+    var badges = (S.rewards.badges || []).map(function (b) { return BADGE_LABEL[b] || b; });
+    var ownedPets = Object.keys(S.collection.pets || {});
+    app.innerHTML = '<div class="screen">' + topbar(false) +
+      '<div class="card"><div class="row between"><h2 style="margin:0">🏆 חדר הגביעים</h2><button class="link" id="back">בית</button></div>' +
+      '<div class="kpi-grid" style="margin-top:8px">' +
+      kpi(S.rewards.stars, 'כוכבים') +
+      kpi((S.rewards.badges || []).length, 'תגים') +
+      kpi(crowns.length, 'כתרי משפחות') +
+      kpi((S.records && S.records.bestGameScore) || 0, 'שיא במשחק') +
+      '</div></div>' +
+
+      '<div class="card"><h3>🐾 הבן-לוויה שלי</h3>' +
+      (ownedPets.length ?
+        '<p class="muted">בחרי חיה שתלווה אותך במסך הבית ותעודד אותך.</p><div class="buddy-pick">' +
+        ownedPets.map(function (key) {
+          return '<button class="tile buddy-opt' + (S.collection.buddy === key ? ' sel' : '') + '" data-k="' + key + '"><span class="emoji">' + (petGlyph(key) || key) + '</span></button>';
+        }).join('') + '</div>'
+        : '<p class="muted">עדיין אין חיות. אמצי חיה ב🧸 חנות הצעצועים.</p>') +
+      '</div>' +
+
+      '<div class="card"><h3>אוספים — השלימי את הסטים!</h3>' +
+      SETS.map(function (set) {
+        var owned = setOwned(set);
+        var have = set.items.filter(function (it) { return owned.indexOf(it) >= 0; }).length;
+        return '<div style="margin-top:10px"><div class="row between"><b>' + set.emoji + ' ' + set.name + '</b>' +
+          '<span class="num" style="font-weight:800">' + have + '/' + set.items.length + (have === set.items.length ? ' ✅' : '') + '</span></div>' +
+          '<div class="set-row">' + set.items.map(function (it) {
+            return '<span class="set-item' + (owned.indexOf(it) >= 0 ? '' : ' missing') + '">' + it + '</span>';
+          }).join('') + '</div></div>';
+      }).join('') +
+      '<p class="muted" style="margin-top:8px">פריטים נוספים בחנות הצעצועים 🧸</p></div>' +
+
+      '<div class="card"><h3>תגים וכתרים</h3>' +
+      (badges.length || crowns.length ?
+        '<div>' + crowns.concat(badges).map(function (t) { return '<span class="pill" style="margin:3px">' + t + '</span>'; }).join('') + '</div>'
+        : '<p class="muted">עוד אין תגים — כל משפחה שתשלטי בה תיתן כתר! 👑</p>') +
+      '</div></div>';
+    bindBtn('back', function () { go('home'); });
+    Array.prototype.forEach.call(app.querySelectorAll('.buddy-opt'), function (b) {
+      b.onclick = function () {
+        S.collection.buddy = b.getAttribute('data-k'); save(); FX.sfx('pop'); render();
+      };
+    });
   }
 
   /* ============================== PARENT GATE ============================== */
@@ -2240,6 +2464,11 @@ import * as Storage from "./storage.js";
       '<div class="row between" style="margin-top:10px"><span>אורך סבב יומי</span>' +
       '<select id="len" class="input" style="width:auto;min-height:48px">' +
       [6, 8, 10, 12].map(function (n) { return '<option value="' + n + '"' + (S.settings.sessionLength === n ? ' selected' : '') + '>' + n + ' תרגילים</option>'; }).join('') +
+      '</select></div>' +
+      '<div class="row between" style="margin-top:10px"><span>ערכת נושא</span>' +
+      '<select id="theme" class="input" style="width:auto;min-height:48px">' +
+      [['auto', 'אוטומטי (עונתי)'], ['spring', 'אביב'], ['summer', 'קיץ'], ['autumn', 'סתיו'], ['winter', 'חורף']]
+        .map(function (o) { return '<option value="' + o[0] + '"' + ((S.settings.theme || 'auto') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
       '</select></div></div>' +
 
       '<div class="card"><h3>גיבוי ושחזור</h3>' +
@@ -2265,6 +2494,7 @@ import * as Storage from "./storage.js";
     document.getElementById('back').onclick = function () { go('parent_dash'); };
     bindToggle('sound'); bindToggle('music'); bindToggle('haptics'); bindToggle('reducedMotion'); bindToggle('analytics'); bindToggle('freeEntry');
     document.getElementById('len').onchange = function (e) { S.settings.sessionLength = Number(e.target.value); save(); };
+    document.getElementById('theme').onchange = function (e) { S.settings.theme = e.target.value; save(); applyTheme(); };
     document.getElementById('backup').onclick = backupState;
     document.getElementById('restoreBtn').onclick = function () { document.getElementById('restoreFile').click(); };
     document.getElementById('restoreFile').onchange = function (e) {
@@ -2347,8 +2577,10 @@ import * as Storage from "./storage.js";
     if (activeId && Storage.getProfile(activeId)) {
       activeProfileId = activeId;
       S = loadActiveState();
+      applyTheme();
       logEvent(EV.app_open, {}); save();
-      go(S.consentGiven ? 'home' : 'onb_gate');
+      if (S.consentGiven && S.baselineDone && checkLogin()) { go('daily_gift'); }
+      else { go(S.consentGiven ? 'home' : 'onb_gate'); }
     } else if (profiles.length === 0) {
       // Fresh install: onboarding will create the first profile.
       activeProfileId = null; S = freshState();

@@ -478,6 +478,40 @@ function additionChoices(sum, rng) {
   return shuf(picks);
 }
 
+/* ============================================================================
+ * Engagement helpers (daily goal, login rewards, weekly challenge, theming).
+ * Pure + deterministic — testable, and easy to tune in one place.
+ * ==========================================================================*/
+
+var DAILY_GOAL_DEFAULT = 10;
+
+/* Stars for the Nth consecutive login day; escalates, then caps at 15. */
+function loginRewardForDay(day) {
+  var table = [0, 2, 3, 5, 8, 10, 12, 15]; // index = day number (1..7)
+  if (day <= 0) return 0;
+  return day < table.length ? table[day] : 15;
+}
+
+/* Rotating weekly challenge, chosen deterministically from the week key so it
+ * is stable within a week and reloads, but changes week to week. */
+var WEEKLY_CHALLENGES = [
+  { id: 'correct50', label: 'ענו נכון על 50 תרגילים השבוע', target: 50, kind: 'correct', emoji: '🎯' },
+  { id: 'sessions5', label: 'השלימו 5 סבבי תרגול השבוע', target: 5, kind: 'sessions', emoji: '📚' },
+  { id: 'games7', label: 'שחקו 7 משחקים השבוע', target: 7, kind: 'games', emoji: '🎮' },
+  { id: 'master3', label: 'הגיעו לשליטה ב-3 עובדות חדשות', target: 3, kind: 'mastered', emoji: '👑' },
+  { id: 'practice20', label: 'פתרו 20 תרגילי חיבור / מילוליות', target: 20, kind: 'practice', emoji: '📝' }
+];
+function hashStr(s) { var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; } return Math.abs(h); }
+function pickWeeklyChallenge(weekKey) { return WEEKLY_CHALLENGES[hashStr(weekKey) % WEEKLY_CHALLENGES.length]; }
+
+/* Seasonal theme key from a Gregorian month (0-11). */
+function seasonalTheme(month) {
+  if (month === 11 || month === 0 || month === 1) return 'winter'; // Dec-Feb
+  if (month >= 5 && month <= 7) return 'summer';                   // Jun-Aug
+  if (month >= 2 && month <= 4) return 'spring';                   // Mar-May
+  return 'autumn';                                                 // Sep-Nov
+}
+
 var ENGINE = {
   DAY: DAY,
   INTERVAL_DAYS: INTERVAL_DAYS,
@@ -511,7 +545,12 @@ var ENGINE = {
   forecastAtRisk: forecastAtRisk,
   estimateMasteryDate: estimateMasteryDate,
   buildAdditionProblem: buildAdditionProblem,
-  additionChoices: additionChoices
+  additionChoices: additionChoices,
+  DAILY_GOAL_DEFAULT: DAILY_GOAL_DEFAULT,
+  WEEKLY_CHALLENGES: WEEKLY_CHALLENGES,
+  loginRewardForDay: loginRewardForDay,
+  pickWeeklyChallenge: pickWeeklyChallenge,
+  seasonalTheme: seasonalTheme
 };
 
 export { ENGINE };

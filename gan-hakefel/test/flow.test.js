@@ -43,6 +43,8 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
     garden: { placed: [] },
     streak: { weekKey: 'w', days: [], shield: true },
     stats: { sessionsCompleted: 1, totalTimeMs: 1000, lastSessionAt: 0, gamesPlayed: 0, arraysCorrect: 0, errorTags: {} },
+    // already "logged in today" so boot routes to home, not the daily gift
+    login: { lastDateKey: (() => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); })(), streakDays: 1, weekStamps: [] },
     history: [], log: []
   };
   const tamari = Storage.createProfile({ name: 'תמרי', avatar: '👑' }, ready);
@@ -85,6 +87,18 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   // Level-up celebration renders the rank badge when a rank is passed in.
   bridge.go('celebrate', { title: 'עלית דרגה!', sub: 'מעולה', rank: bridge.ENGINE.rankForPct(0.5), then: 'home' });
   assert.ok(window.document.querySelector('.rank-up'), 'level-up celebration shows a rank badge');
+
+  // Home shows the daily-goal ring and the weekly challenge.
+  assert.ok(homeHTML.includes('היעד היומי'), 'home shows the daily goal');
+  assert.ok(homeHTML.includes('אתגר השבוע'), 'home shows the weekly challenge');
+
+  // Engagement / collection screens render.
+  bridge.go('daily_gift');
+  assert.ok(window.document.querySelector('.gift-row'), 'daily gift calendar renders');
+  bridge.go('trophies');
+  assert.ok(window.document.querySelector('.set-row'), 'trophy room shows collection sets');
+  bridge.go('land_story', { fam: 'twos' });
+  assert.ok(window.document.getElementById('goLand'), 'land story cutscene renders');
 
   // Practice centre: hub + all three activities render without throwing.
   for (const route of ['practice_hub', 'practice_add_h', 'practice_add_v', 'practice_word']) {

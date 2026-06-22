@@ -122,6 +122,28 @@ test('additionChoices: 4 unique options including the correct sum', () => {
   }
 });
 
+test('loginRewardForDay escalates and caps', () => {
+  assert.equal(E.loginRewardForDay(0), 0);
+  assert.equal(E.loginRewardForDay(1), 2);
+  assert.ok(E.loginRewardForDay(7) >= E.loginRewardForDay(3));
+  assert.equal(E.loginRewardForDay(30), E.loginRewardForDay(7), 'caps after day 7');
+});
+
+test('pickWeeklyChallenge is deterministic per week and valid', () => {
+  const a = E.pickWeeklyChallenge('2026-25');
+  const b = E.pickWeeklyChallenge('2026-25');
+  assert.deepEqual(a, b, 'same week => same challenge');
+  assert.ok(E.WEEKLY_CHALLENGES.includes(a));
+  assert.ok('target' in a && 'kind' in a);
+});
+
+test('seasonalTheme maps months to seasons', () => {
+  assert.equal(E.seasonalTheme(0), 'winter');
+  assert.equal(E.seasonalTheme(6), 'summer');
+  assert.equal(E.seasonalTheme(3), 'spring');
+  assert.equal(E.seasonalTheme(9), 'autumn');
+});
+
 test('estimateMasteryDate needs a positive pace and projects forward', () => {
   const cards = E.buildFactSpace();
   cards.slice(0, 6).forEach((c) => { c.state = 'mastered'; });

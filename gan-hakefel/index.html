@@ -264,6 +264,38 @@
   .vadd input.cell.bad{border-color:var(--bad); background:#fff0f0}
   .vadd input.cell.good{border-color:var(--good); background:#f0fff4}
   .vadd .carry-row{min-height:1.2em}
+  /* ===== seasonal themes (override sky/meadow palette on <html data-theme>) ===== */
+  html[data-theme="spring"]{--sky:#cdeaff;--sky2:#eafaf0;--meadow2:#bfe89a}
+  html[data-theme="summer"]{--sky:#aee0ff;--sky2:#fff7df;--meadow2:#9bd97e}
+  html[data-theme="autumn"]{--sky:#ffe2bf;--sky2:#fff1df;--meadow2:#e9c27a}
+  html[data-theme="winter"]{--sky:#dbeeff;--sky2:#f3f9ff;--meadow2:#cfe6ff}
+  /* day/night: gentle dusk veil at night, never harming contrast inside cards */
+  html[data-time="night"] body::before{content:"";position:fixed;inset:0;pointer-events:none;
+    background:linear-gradient(180deg,rgba(30,40,90,.16),rgba(20,28,60,.08));z-index:-1}
+  /* ===== living world ===== */
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+  .buddy-line{margin-top:4px;font-size:13px;display:flex;align-items:center;gap:6px}
+  .buddy-glyph{font-size:24px;display:inline-block;animation:bob 2.2s ease-in-out infinite}
+  .reduced .buddy-glyph{animation:none!important}
+  /* ===== daily goal ring + streak flame ===== */
+  .daily-card .goal-wrap{display:flex;align-items:center;gap:14px;margin-top:8px}
+  .goal-ring circle:last-child{transition:stroke-dashoffset .6s ease}
+  .flame{font-weight:900;color:#b9b9b9}
+  .flame.lit{color:#ff6a3d}
+  .flame .num{font-size:20px}
+  /* ===== daily gift calendar ===== */
+  .gift-row{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:10px 0}
+  .gift-cell{flex:1;min-width:60px;border:2px solid var(--line);border-radius:12px;padding:6px 2px;text-align:center;background:var(--card-soft)}
+  .gift-cell .gc-em{display:block;font-size:24px;line-height:1.2}
+  .gift-cell.got{border-color:var(--leaf);background:#f0fff4}
+  .gift-cell.today{border-color:var(--sun-dark);background:#fff7d9;animation:pop .4s ease}
+  .reduced .gift-cell.today{animation:none!important}
+  /* ===== collection sets + buddy picker (trophy room) ===== */
+  .set-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:26px}
+  .set-item.missing{filter:grayscale(1);opacity:.32}
+  .buddy-pick{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .buddy-opt{min-width:64px}
+  .buddy-opt.sel{border-color:var(--sun-dark);background:#fff7d9}
   .hud{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:900}
   .hud-score{color:var(--sun-dark)} .hud-combo{color:#ff6a3d; min-height:1.4em}
   .hud-combo.pulse{animation:pop .35s ease}
