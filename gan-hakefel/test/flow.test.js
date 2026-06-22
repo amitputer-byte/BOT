@@ -141,6 +141,9 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   assert.ok(window.document.getElementById('tg_readAloud'), 'read-aloud toggle present');
   assert.ok(settings.includes('גיבוי אוטומטי'), 'settings has the auto-backup section');
   assert.ok(window.document.getElementById('autoBkList'), 'auto-backup restore control present');
+  assert.ok(settings.includes('העברת פרופיל בין מכשירים'), 'settings has the device-transfer section');
+  assert.ok(window.document.getElementById('expProfile'), 'profile export control present');
+  assert.ok(window.document.getElementById('impProfileBtn'), 'profile import control present');
 });
 
 test('fresh boot (no data) shows onboarding, not a game', async () => {

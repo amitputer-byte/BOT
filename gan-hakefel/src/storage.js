@@ -375,6 +375,42 @@ export function recoverIfEmpty() {
 /* Test helper: reset the in-memory durable backend. */
 export function _resetDurable() { try { DURABLE._reset(); } catch (e) {} }
 
+/* ============================================================================
+ * Profile transfer between devices: a portable, versioned export envelope and a
+ * non-destructive import (always creates a NEW profile, never overwrites).
+ * ==========================================================================*/
+export var PROFILE_EXPORT_FORMAT = 'gan-hakefel-profile';
+
+/* Build a portable export of one profile (metadata + full state), or null. */
+export function exportProfile(id) {
+  var meta = getProfile(id);
+  var state = loadProfileState(id);
+  if (!meta || !state) return null;
+  return {
+    format: PROFILE_EXPORT_FORMAT,
+    version: 1,
+    exportedAt: Date.now(),
+    profile: { name: meta.name, avatar: meta.avatar },
+    state: state
+  };
+}
+
+/* Validate an export envelope without importing it. */
+export function isValidProfileExport(obj) {
+  return !!(obj && obj.format === PROFILE_EXPORT_FORMAT &&
+    obj.state && Array.isArray(obj.state.cards) && obj.state.cards.length === 66);
+}
+
+/* Import an export envelope as a brand-new profile on this device. Returns the
+ * created Profile, or null if the envelope is invalid. Never overwrites an
+ * existing profile and does not change the active profile. */
+export function importProfile(obj) {
+  if (!isValidProfileExport(obj)) return null;
+  var name = (obj.profile && obj.profile.name) || 'אלופ/ה';
+  var avatar = (obj.profile && obj.profile.avatar) || '👑';
+  return createProfile({ name: name, avatar: avatar, makeActive: false }, obj.state);
+}
+
 export default {
   NS, LEGACY_KEY, REGISTRY_KEY, LEGACY_BACKUP_KEY, SCHEMA_VERSION,
   profileKey, genId,
@@ -383,5 +419,6 @@ export default {
   createProfile, updateProfile, deleteProfile,
   loadProfileState, saveProfileState,
   applyMigrations, hasLegacy, getLegacyBackup, migrateLegacy,
-  autoBackup, listBackups, restoreBackup, recoverIfEmpty, _clearAll, _resetDurable
+  autoBackup, listBackups, restoreBackup, recoverIfEmpty, _clearAll, _resetDurable,
+  PROFILE_EXPORT_FORMAT, exportProfile, isValidProfileExport, importProfile
 };

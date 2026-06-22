@@ -2502,6 +2502,13 @@ import * as Storage from "./storage.js";
       '<button class="btn btn-soft btn-sm" id="autoBkList" style="width:auto">📜 הצג גיבויים אוטומטיים</button>' +
       '<div id="autoBkBox" style="margin-top:8px"></div></div>' +
 
+      '<div class="card"><h3>העברת פרופיל בין מכשירים</h3>' +
+      '<p class="muted">ייצאו את הפרופיל לקובץ, העבירו למכשיר אחר (מייל / Drive), וייבאו שם. הייבוא יוצר פרופיל חדש ולא דורס קיימים.</p>' +
+      '<div class="btn-row"><button class="btn btn-soft btn-sm" id="expProfile">📤 ייצוא הפרופיל הזה</button>' +
+      '<button class="btn btn-soft btn-sm" id="impProfileBtn">📥 ייבוא פרופיל מקובץ</button></div>' +
+      '<input type="file" id="impProfileFile" accept="application/json" style="display:none">' +
+      '<div class="err-text" id="xferMsg"></div></div>' +
+
       '<div class="card"><h3>התקנה על הטאבלט</h3>' +
       '<p class="muted">אפשר להוסיף את גן הכפל למסך הבית: בתפריט הדפדפן בחרו "הוסף למסך הבית". האפליקציה עובדת לגמרי ללא אינטרנט.</p></div>' +
 
@@ -2543,7 +2550,38 @@ import * as Storage from "./storage.js";
         });
       });
     };
-    document.getElementById('backup').onclick = backupState;
+    document.getElementById('expProfile').onclick = function () {
+      var data = Storage.exportProfile(activeProfileId);
+      var msg = document.getElementById('xferMsg');
+      if (!data) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = 'הייצוא נכשל.'; } return; }
+      try {
+        var blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a'); a.href = url;
+        a.download = 'gan-hakefel-profile-' + (data.profile.name || 'profile') + '.json'; a.click();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        if (msg) { msg.style.color = 'var(--good)'; msg.textContent = 'הפרופיל יוצא לקובץ.'; }
+      } catch (e) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = 'הייצוא נכשל.'; } }
+    };
+    document.getElementById('impProfileBtn').onclick = function () { document.getElementById('impProfileFile').click(); };
+    document.getElementById('impProfileFile').onchange = function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f) return;
+      var msg = document.getElementById('xferMsg');
+      var reader = new FileReader();
+      reader.onload = function () {
+        var obj = null; try { obj = JSON.parse(reader.result); } catch (er) { obj = null; }
+        if (!Storage.isValidProfileExport(obj)) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = 'הקובץ אינו ייצוא פרופיל תקין.'; } return; }
+        var p = Storage.importProfile(obj);
+        if (p && msg) {
+          msg.style.color = 'var(--good)';
+          msg.innerHTML = 'הפרופיל "' + escapeHtml(p.name) + '" יובא! ';
+          var go2 = document.createElement('button'); go2.className = 'link'; go2.textContent = 'למסך בחירת הפרופיל';
+          go2.onclick = function () { go('profiles'); };
+          msg.appendChild(go2);
+        }
+      };
+      reader.readAsText(f);
+    };
     document.getElementById('restoreBtn').onclick = function () { document.getElementById('restoreFile').click(); };
     document.getElementById('restoreFile').onchange = function (e) {
       var f = e.target.files && e.target.files[0]; if (!f) return;

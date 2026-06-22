@@ -180,6 +180,26 @@ test('autoBackup throttles per day, lists newest, and restores a snapshot', asyn
   assert.equal(Storage.loadProfileState(a.id).rewards.stars, 1);
 });
 
+test('exportProfile + importProfile transfers a profile as a new one', () => {
+  const a = Storage.createProfile({ name: 'תמרי', avatar: '👑' }, { cards: E.buildFactSpace(), rewards: { stars: 7 } });
+  const env = Storage.exportProfile(a.id);
+  assert.equal(env.format, Storage.PROFILE_EXPORT_FORMAT);
+  assert.ok(Storage.isValidProfileExport(env));
+  const before = Storage.listProfiles().length;
+  const imp = Storage.importProfile(env);
+  assert.ok(imp && imp.id !== a.id, 'creates a new profile with a fresh id');
+  assert.equal(Storage.listProfiles().length, before + 1);
+  assert.equal(Storage.loadProfileState(imp.id).rewards.stars, 7);
+  assert.equal(Storage.getActiveProfileId(), a.id, 'import does not switch the active profile');
+});
+
+test('importProfile rejects invalid envelopes', () => {
+  assert.equal(Storage.importProfile(null), null);
+  assert.equal(Storage.importProfile({ format: 'nope' }), null);
+  assert.equal(Storage.importProfile({ format: Storage.PROFILE_EXPORT_FORMAT, state: { cards: [] } }), null);
+  assert.equal(Storage.isValidProfileExport({ format: Storage.PROFILE_EXPORT_FORMAT, state: { cards: new Array(66) } }), true);
+});
+
 test('autoBackup prunes snapshots to the keep limit', async () => {
   const a = Storage.createProfile({ name: 'A' }, { cards: [], rewards: {} });
   for (let i = 1; i <= 10; i++) {
