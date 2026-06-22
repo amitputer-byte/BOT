@@ -33,11 +33,11 @@
 ## מבנה הפרויקט
 > סעיף חי — עדכן אותו ככל שהפרויקט מתפתח, כדי שסשן עתידי יתמצא מהר.
 - `index.html` — נקודת הכניסה של Vite (head + `<style>` + `#app` + `<script type="module" src="/src/main.js">`).
-- `src/engine.js` — מנוע הלמידה הטהור (spaced-repetition + state machine). ESM, נטען גם ע"י הטסטים.
-- `src/storage.js` — **שכבת האחסון היחידה** מודעת-הפרופיל (registry, מצביע פעיל, state per-profile, `schemaVersion` + framework מיגרציות, מיגרציית legacy אידמפוטנטית עם גיבוי גולמי). כל I/O ל-localStorage עובר מכאן.
-- `src/app.js` — שכבת האפליקציה: UI, ניתוב (`go`/`render`), ~10 משחקים, חנות/חיות/קישוטים, מפת עולם, אונבורדינג, בחירת/הוספת/החלפת פרופיל, דשבורד הורים. משתמש ב-`ENGINE` וב-`Storage`.
+- `src/engine.js` — מנוע הלמידה הטהור (spaced-repetition + state machine) + עוזרים טהורים: דרגות/כוכבים/מסע, תחזית סיכון + תאריך שליטה, גנרטורי חיבור, ועוזרי engagement (יעד יומי/פרס התחברות/אתגר שבועי/ערכת נושא). ESM, נטען גם ע"י הטסטים.
+- `src/storage.js` — **שכבת האחסון היחידה** מודעת-הפרופיל: registry, מצביע פעיל, state per-profile, `schemaVersion` + framework מיגרציות, מיגרציית legacy אידמפוטנטית עם גיבוי גולמי, **מראה IndexedDB + גיבוי אוטומטי יומי + שחזור**, וייצוא/ייבוא פרופיל בין מכשירים. כל I/O ל-localStorage עובר מכאן.
+- `src/app.js` — שכבת האפליקציה: UI, ניתוב (`go`/`render`), 11 משחקים, מרכז תרגול (חיבור עד 100 + שאלות מילוליות), חנות/חיות/קישוטים, מפת עולם + סיפור, חדר גביעים/אוספים, יעד יומי/אתגר שבועי/מתנת התחברות/בן-לוויה, נגישות, אונבורדינג, בחירת/הוספת/החלפת פרופיל, דשבורד הורים מנבא. משתמש ב-`ENGINE` וב-`Storage`.
 - `src/main.js` — entry שמייבא את `app.js`.
-- `test/engine.test.js` — רגרסיית מנוע. `test/storage.test.js` — מיגרציה + בידוד פרופילים. `test/flow.test.js` — jsdom: boot, RTL, טעינת כל 10 המשחקים.
+- `test/engine.test.js` — רגרסיית מנוע + עוזרים טהורים. `test/storage.test.js` — מיגרציה, בידוד פרופילים, עמידות (IndexedDB) וייצוא/ייבוא. `test/flow.test.js` — jsdom: boot, RTL, טעינת כל המשחקים וכל המסכים.
 - `gan-hakefel.baseline.html` — צילום המקור לפני הרפקטור (נקודת חזרה).
 - בנייה: `npm run build` → `dist/index.html` (קובץ יחיד, inline module, offline).
 

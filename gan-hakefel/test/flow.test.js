@@ -144,6 +144,16 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   assert.ok(settings.includes('העברת פרופיל בין מכשירים'), 'settings has the device-transfer section');
   assert.ok(window.document.getElementById('expProfile'), 'profile export control present');
   assert.ok(window.document.getElementById('impProfileBtn'), 'profile import control present');
+
+  // Reset progress must not drop reward/stat field shapes (regression):
+  // shop/garden read rewards.decor etc., so a partial rebuild would crash.
+  window.confirm = () => true;
+  window.document.getElementById('reset').click();
+  assert.ok(Array.isArray(bridge.state().rewards.decor), 'reset keeps rewards.decor');
+  assert.ok(bridge.state().stats.practice, 'reset keeps stats.practice');
+  bridge.state().baselineDone = true; // allow non-baseline screens
+  bridge.go('shop');
+  assert.ok(window.document.querySelector('.screen'), 'shop renders after reset (no dropped fields)');
 });
 
 test('fresh boot (no data) shows onboarding, not a game', async () => {

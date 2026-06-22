@@ -2590,10 +2590,17 @@ import * as Storage from "./storage.js";
       reader.readAsText(f);
     };
     document.getElementById('reset').onclick = function () {
-      if (!confirm('לאפס את כל ההתקדמות בלימוד? הפרופיל יישמר.')) return;
-      S.cards = E.buildFactSpace(); S.rewards = { stars: 0, unlocked: [], badges: [], bossDone: [] };
-      S.stats = { sessionsCompleted: 0, totalTimeMs: 0, lastSessionAt: 0, gamesPlayed: 0, arraysCorrect: 0, errorTags: {} };
-      S.history = []; S.baselineDone = false; save(); document.getElementById('msg').textContent = 'ההתקדמות אופסה.';
+      if (!confirm('לאפס את כל ההתקדמות בלימוד? הפרופיל, הכוכבים והפריטים יישמרו.')) return;
+      // Reset ONLY the learning progress; keep the profile, purchases, streak,
+      // collection etc. Touch existing fields in place so no shape is dropped.
+      S.cards = E.buildFactSpace();
+      S.stats.sessionsCompleted = 0; S.stats.totalTimeMs = 0; S.stats.lastSessionAt = 0;
+      S.stats.arraysCorrect = 0; S.stats.errorTags = {};
+      S.history = []; S.baselineDone = false;
+      S.rewards.bossDone = []; S.rewards.rankSeen = 0;
+      S.daily = { dateKey: '', correct: 0, sessions: 0, goalMet: false };
+      save();
+      document.getElementById('msg').textContent = 'ההתקדמות בלימוד אופסה.';
     };
     document.getElementById('delete').onclick = function () {
       if (!confirm('למחוק לצמיתות את הנתונים של הפרופיל הזה?')) return;
