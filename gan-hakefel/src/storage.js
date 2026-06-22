@@ -134,8 +134,15 @@ export function deleteProfile(id) {
   if (reg.activeProfileId === id) {
     reg.activeProfileId = reg.profiles.length ? reg.profiles[0].id : null;
   }
+  if (reg.lastBackup) delete reg.lastBackup[id];
   saveRegistry(reg);
   removeRaw(profileKey(id));
+  // Also remove the durable mirror + this profile's snapshots, so a later
+  // recoverIfEmpty() can never resurrect a deleted profile's data.
+  swallow(DURABLE.del(profileKey(id)));
+  swallow(DURABLE.listBackups(id).then(function (list) {
+    return Promise.all((list || []).map(function (b) { return swallow(DURABLE.delBackup(b.id)); }));
+  }));
   return reg.activeProfileId;
 }
 
@@ -363,12 +370,13 @@ export function recoverIfEmpty() {
   if (readRaw(LEGACY_KEY) != null) return Promise.resolve(false); // legacy path handles it
   return swallow(DURABLE.get(REGISTRY_KEY)).then(function (reg) {
     if (!reg || !Array.isArray(reg.profiles)) return false;
-    writeJSON(REGISTRY_KEY, reg);
+    // Restore the profile blobs FIRST, then the registry — so the registry
+    // never references a profile whose state hasn't landed yet.
     return Promise.all(reg.profiles.map(function (p) {
       return swallow(DURABLE.get(profileKey(p.id))).then(function (data) {
         if (data) writeJSON(profileKey(p.id), data);
       });
-    })).then(function () { return true; });
+    })).then(function () { writeJSON(REGISTRY_KEY, reg); return true; });
   });
 }
 

@@ -459,6 +459,14 @@ function buildAdditionProblem(opts) {
     (requireCarry && ((a % 10) + (b % 10) < 10)) ||
     (twoDigit && (a < 10 || b < 10))
   ));
+  // Guarantee the hard invariant (sum within [minSum, max]) even when the
+  // requested constraints are impossible to satisfy — carry/two-digit are
+  // best-effort, the range is not.
+  if (sum > max || sum < minSum) {
+    a = 1;
+    b = Math.min(max - 1, Math.max(1, minSum - 1));
+    sum = a + b;
+  }
   return { a: a, b: b, sum: sum, carry: ((a % 10) + (b % 10) >= 10) ? 1 : 0 };
 }
 

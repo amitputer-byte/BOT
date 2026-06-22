@@ -109,6 +109,11 @@ test('buildAdditionProblem respects max / carry / two-digit constraints', () => 
     assert.equal((p.a % 10) + (p.b % 10) >= 10, true, 'units carry');
     assert.equal(p.carry, 1);
   }
+  // Impossible constraints must still never violate sum <= max.
+  for (let i = 0; i < 50; i++) {
+    const p = E.buildAdditionProblem({ max: 15, requireCarry: true, twoDigit: true });
+    assert.ok(p.sum <= 15 && p.sum === p.a + p.b && p.a >= 1 && p.b >= 1, 'range guaranteed under impossible constraints');
+  }
 });
 
 test('additionChoices: 4 unique options including the correct sum', () => {

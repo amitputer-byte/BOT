@@ -167,6 +167,19 @@ test('recoverIfEmpty is a no-op when localStorage already has data', async () =>
   assert.equal(restored, false);
 });
 
+test('a deleted profile is not resurrected by durable recovery', async () => {
+  const a = Storage.createProfile({ name: 'A' }, { cards: [{ id: '1' }], rewards: {} });
+  const b = Storage.createProfile({ name: 'B' }, { cards: [{ id: '1' }], rewards: { stars: 9 } });
+  Storage.deleteProfile(b.id);
+  // Simulate localStorage eviction; recover from the durable mirror.
+  Storage._clearAll();
+  await Storage.recoverIfEmpty();
+  const ids = Storage.listProfiles().map((p) => p.id);
+  assert.ok(ids.includes(a.id), 'kept profile recovered');
+  assert.ok(!ids.includes(b.id), 'deleted profile NOT resurrected');
+  assert.equal(Storage.loadProfileState(b.id), null);
+});
+
 test('autoBackup throttles per day, lists newest, and restores a snapshot', async () => {
   const a = Storage.createProfile({ name: 'A' }, { cards: [], rewards: { stars: 1 } });
   assert.equal(await Storage.autoBackup(a.id, { cards: [], rewards: { stars: 1 } }, { dayKey: '2026-1-1' }), true);
