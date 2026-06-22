@@ -31,6 +31,7 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   // so boot loads it and routes straight to home.
   const { ENGINE: E } = await import('../src/engine.js');
   const Storage = await import('../src/storage.js');
+  Storage._resetDurable();
   const cards = E.buildFactSpace();
   cards[0].state = 'mastered'; cards[0].box = 5;
   const ready = {
@@ -138,6 +139,8 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   assert.ok(settings.includes('נגישות'), 'settings has an accessibility section');
   assert.ok(window.document.getElementById('textScale'), 'text-size control present');
   assert.ok(window.document.getElementById('tg_readAloud'), 'read-aloud toggle present');
+  assert.ok(settings.includes('גיבוי אוטומטי'), 'settings has the auto-backup section');
+  assert.ok(window.document.getElementById('autoBkList'), 'auto-backup restore control present');
 });
 
 test('fresh boot (no data) shows onboarding, not a game', async () => {
@@ -152,6 +155,10 @@ test('fresh boot (no data) shows onboarding, not a game', async () => {
   globalThis.localStorage = window.localStorage; // fresh, empty
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
   globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+
+  // Clear the durable backend so the previous test's mirror can't be recovered.
+  const Storage = await import('../src/storage.js');
+  Storage._resetDurable();
 
   // Reset the ESM module cache so app.js re-boots against the fresh DOM.
   const appUrl = '../src/app.js?fresh=' + Date.now();

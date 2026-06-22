@@ -77,7 +77,9 @@ export function getRegistry() {
 }
 export function saveRegistry(reg) {
   reg.schemaVersion = SCHEMA_VERSION;
-  return writeJSON(REGISTRY_KEY, reg);
+  var ok = writeJSON(REGISTRY_KEY, reg);
+  mirror(REGISTRY_KEY, reg); // durable IndexedDB mirror (best-effort, async)
+  return ok;
 }
 
 /* ---------- profiles ---------- */
@@ -145,7 +147,9 @@ export function loadProfileState(id) {
 export function saveProfileState(id, state) {
   if (!id || !state) return false;
   try { state.schemaVersion = SCHEMA_VERSION; } catch (e) {}
-  return writeJSON(profileKey(id), state);
+  var ok = writeJSON(profileKey(id), state);
+  mirror(profileKey(id), state); // durable IndexedDB mirror (best-effort, async)
+  return ok;
 }
 
 /* ---------- schema migration framework ----------
@@ -238,6 +242,139 @@ export function _clearAll() {
   removeRaw(REGISTRY_KEY);
 }
 
+/* ============================================================================
+ * Durability layer: IndexedDB mirror + periodic auto-backup snapshots.
+ *
+ * Design (zero-data-loss, no app changes): localStorage stays the synchronous
+ * source of truth for the live session. On every write we ALSO mirror to
+ * IndexedDB asynchronously (best-effort), and we keep rolling daily snapshots.
+ * If localStorage is ever evicted (Safari ITP, storage pressure, manual clear),
+ * `recoverIfEmpty()` rehydrates it from IndexedDB at boot. Where IndexedDB is
+ * unavailable (e.g. Node tests), an in-memory backend keeps the same code paths
+ * exercised — only persistence differs.
+ * ==========================================================================*/
+
+var BACKUPS_KEEP = 7;
+function dayKey(d) { d = d || new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+
+/* Async durable backend: real IndexedDB when present, else in-memory. */
+var DURABLE = (function () {
+  var hasIDB = false;
+  try { hasIDB = (typeof indexedDB !== 'undefined' && indexedDB !== null); } catch (e) { hasIDB = false; }
+
+  if (!hasIDB) {
+    var kv = {}, backups = [], seq = 1;
+    return {
+      get: function (k) { return Promise.resolve(Object.prototype.hasOwnProperty.call(kv, k) ? kv[k] : null); },
+      set: function (k, v) { kv[k] = v; return Promise.resolve(true); },
+      del: function (k) { delete kv[k]; return Promise.resolve(true); },
+      addBackup: function (rec) { rec = Object.assign({ id: seq++ }, rec); backups.push(rec); return Promise.resolve(rec.id); },
+      listBackups: function (pid) { return Promise.resolve(backups.filter(function (b) { return b.profileId === pid; }).map(function (b) { return Object.assign({}, b); })); },
+      delBackup: function (id) { for (var i = 0; i < backups.length; i++) if (backups[i].id === id) { backups.splice(i, 1); break; } return Promise.resolve(true); },
+      _reset: function () { kv = {}; backups = []; seq = 1; }
+    };
+  }
+
+  var DB = 'gankefel', VER = 1;
+  function open() {
+    return new Promise(function (res, rej) {
+      var req = indexedDB.open(DB, VER);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        if (!db.objectStoreNames.contains('backups')) {
+          var st = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
+          st.createIndex('profileId', 'profileId', { unique: false });
+        }
+      };
+      req.onsuccess = function () { res(req.result); };
+      req.onerror = function () { rej(req.error); };
+    });
+  }
+  function reqP(makeReq) {
+    return open().then(function (db) {
+      return new Promise(function (res, rej) {
+        var r = makeReq(db);
+        r.onsuccess = function () { res(r.result); };
+        r.onerror = function () { rej(r.error); };
+      });
+    });
+  }
+  return {
+    get: function (k) { return reqP(function (db) { return db.transaction('kv', 'readonly').objectStore('kv').get(k); }).then(function (v) { return v == null ? null : v; }); },
+    set: function (k, v) { return reqP(function (db) { return db.transaction('kv', 'readwrite').objectStore('kv').put(v, k); }); },
+    del: function (k) { return reqP(function (db) { return db.transaction('kv', 'readwrite').objectStore('kv').delete(k); }); },
+    addBackup: function (rec) { return reqP(function (db) { return db.transaction('backups', 'readwrite').objectStore('backups').add(rec); }); },
+    listBackups: function (pid) { return reqP(function (db) { return db.transaction('backups', 'readonly').objectStore('backups').index('profileId').getAll(pid); }).then(function (a) { return a || []; }); },
+    delBackup: function (id) { return reqP(function (db) { return db.transaction('backups', 'readwrite').objectStore('backups').delete(id); }); },
+    _reset: function () { return Promise.resolve(true); }
+  };
+})();
+
+function swallow(p) { return p && p.catch ? p.catch(function () { return null; }) : Promise.resolve(null); }
+/* Fire-and-forget durable mirror of a key/value. */
+function mirror(key, val) { swallow(DURABLE.set(key, val)); }
+
+/* Once-a-day snapshot of a profile's full state into the durable backups store,
+ * pruned to the most recent BACKUPS_KEEP. Throttled via the registry so it is a
+ * cheap no-op for the rest of the day. Returns a Promise<boolean>. */
+export function autoBackup(id, state, opts) {
+  opts = opts || {};
+  if (!id || !state) return Promise.resolve(false);
+  var day = opts.dayKey || dayKey();
+  var reg = getRegistry();
+  reg.lastBackup = reg.lastBackup || {};
+  if (reg.lastBackup[id] === day && !opts.force) return Promise.resolve(false);
+  reg.lastBackup[id] = day; saveRegistry(reg);
+  return swallow(DURABLE.addBackup({ profileId: id, ts: Date.now(), day: day, data: state }))
+    .then(function () { return pruneBackups(id, opts.keep || BACKUPS_KEEP); })
+    .then(function () { return true; });
+}
+function pruneBackups(id, keep) {
+  return swallow(DURABLE.listBackups(id)).then(function (list) {
+    if (!list || list.length <= keep) return false;
+    list.sort(function (a, b) { return b.ts - a.ts; });
+    var extra = list.slice(keep);
+    return Promise.all(extra.map(function (b) { return swallow(DURABLE.delBackup(b.id)); })).then(function () { return true; });
+  });
+}
+/* List a profile's snapshots, newest first: [{id, ts, day}]. */
+export function listBackups(id) {
+  return swallow(DURABLE.listBackups(id)).then(function (list) {
+    list = list || [];
+    list.sort(function (a, b) { return b.ts - a.ts; });
+    return list.map(function (b) { return { id: b.id, ts: b.ts, day: b.day }; });
+  });
+}
+/* Restore a snapshot into the active store. Returns Promise<state|null>. */
+export function restoreBackup(id, backupId) {
+  return swallow(DURABLE.listBackups(id)).then(function (list) {
+    var rec = (list || []).filter(function (b) { return b.id === backupId; })[0];
+    if (!rec || !rec.data) return null;
+    saveProfileState(id, rec.data); // writes localStorage + re-mirrors
+    return rec.data;
+  });
+}
+
+/* If localStorage has no registry (e.g. it was evicted) but IndexedDB does,
+ * rehydrate localStorage from the durable mirror. Returns Promise<boolean>. */
+export function recoverIfEmpty() {
+  if (readRaw(REGISTRY_KEY) != null) return Promise.resolve(false);
+  if (readRaw(LEGACY_KEY) != null) return Promise.resolve(false); // legacy path handles it
+  return swallow(DURABLE.get(REGISTRY_KEY)).then(function (reg) {
+    if (!reg || !Array.isArray(reg.profiles)) return false;
+    writeJSON(REGISTRY_KEY, reg);
+    return Promise.all(reg.profiles.map(function (p) {
+      return swallow(DURABLE.get(profileKey(p.id))).then(function (data) {
+        if (data) writeJSON(profileKey(p.id), data);
+      });
+    })).then(function () { return true; });
+  });
+}
+
+/* Test helper: reset the in-memory durable backend. */
+export function _resetDurable() { try { DURABLE._reset(); } catch (e) {} }
+
 export default {
   NS, LEGACY_KEY, REGISTRY_KEY, LEGACY_BACKUP_KEY, SCHEMA_VERSION,
   profileKey, genId,
@@ -245,5 +382,6 @@ export default {
   listProfiles, getProfile, getActiveProfileId, setActiveProfileId,
   createProfile, updateProfile, deleteProfile,
   loadProfileState, saveProfileState,
-  applyMigrations, hasLegacy, getLegacyBackup, migrateLegacy, _clearAll
+  applyMigrations, hasLegacy, getLegacyBackup, migrateLegacy,
+  autoBackup, listBackups, restoreBackup, recoverIfEmpty, _clearAll, _resetDurable
 };

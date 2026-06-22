@@ -948,6 +948,7 @@ import * as Storage from "./storage.js";
     bumpDaily(0, 1); bumpWeekly('sessions', 1); setRecord('bestSessionCorrect', correct);
     if (S.stats.sessionsCompleted === 1) giveBadge('first_lesson');
     checkBadges(); recordHistory(); bumpChest(1); save();
+    try { Storage.autoBackup(activeProfileId, S); } catch (e) {} // daily durable snapshot
     logEvent(mode === 'review' ? EV.review_completed : EV.lesson_completed, { correct: correct, total: total, ms: dt, boss: bossFam || undefined });
     run = null;
 
@@ -2464,7 +2465,7 @@ import * as Storage from "./storage.js";
     app.innerHTML = '<div class="screen">' +
       '<div class="row between"><h2 style="margin:0">פרטיות והגדרות</h2><button class="link" id="back">חזרה</button></div>' +
       '<div class="card"><h3>הגדרות</h3>' +
-      toggleRow('sound', 'קול והקראה', S.settings.sound) +
+      toggleRow('sound', 'קול ואפקטים', S.settings.sound) +
       toggleRow('music', 'מוזיקת רקע', S.settings.music) +
       toggleRow('haptics', 'רטט במשחקים', S.settings.haptics) +
       toggleRow('reducedMotion', 'הפחתת אנימציות', S.settings.reducedMotion) +
@@ -2496,6 +2497,11 @@ import * as Storage from "./storage.js";
       '<input type="file" id="restoreFile" accept="application/json" style="display:none">' +
       '<div class="err-text" id="bkMsg"></div></div>' +
 
+      '<div class="card"><h3>גיבוי אוטומטי</h3>' +
+      '<p class="muted">המכשיר שומר תמונת-מצב יומית אוטומטית (ב-IndexedDB), ושומר עותק עמיד גם אם הדפדפן מנקה את הזיכרון. אפשר לשחזר תמונת-מצב קודמת:</p>' +
+      '<button class="btn btn-soft btn-sm" id="autoBkList" style="width:auto">📜 הצג גיבויים אוטומטיים</button>' +
+      '<div id="autoBkBox" style="margin-top:8px"></div></div>' +
+
       '<div class="card"><h3>התקנה על הטאבלט</h3>' +
       '<p class="muted">אפשר להוסיף את גן הכפל למסך הבית: בתפריט הדפדפן בחרו "הוסף למסך הבית". האפליקציה עובדת לגמרי ללא אינטרנט.</p></div>' +
 
@@ -2515,6 +2521,28 @@ import * as Storage from "./storage.js";
     document.getElementById('len').onchange = function (e) { S.settings.sessionLength = Number(e.target.value); save(); };
     document.getElementById('theme').onchange = function (e) { S.settings.theme = e.target.value; save(); applyTheme(); };
     document.getElementById('textScale').onchange = function (e) { S.settings.textScale = e.target.value; save(); applyA11y(); };
+    document.getElementById('autoBkList').onclick = function () {
+      var box = document.getElementById('autoBkBox');
+      box.innerHTML = '<small class="muted">טוען…</small>';
+      Storage.listBackups(activeProfileId).then(function (list) {
+        if (!list.length) { box.innerHTML = '<small class="muted">עדיין אין גיבויים אוטומטיים — ייווצרו אחרי סבבי תרגול.</small>'; return; }
+        box.innerHTML = list.map(function (b) {
+          var d = new Date(b.ts);
+          var when = d.getDate() + '.' + (d.getMonth() + 1) + '.' + d.getFullYear() + ' ' + d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2);
+          return '<div class="row between" style="margin-top:6px"><span>📦 ' + when + '</span>' +
+            '<button class="btn btn-soft btn-sm" data-bk="' + b.id + '" style="width:auto">שחזר</button></div>';
+        }).join('');
+        Array.prototype.forEach.call(box.querySelectorAll('[data-bk]'), function (btn) {
+          btn.onclick = function () {
+            if (!confirm('לשחזר את הפרופיל לתמונת-מצב זו? המצב הנוכחי יוחלף.')) return;
+            Storage.restoreBackup(activeProfileId, Number(btn.getAttribute('data-bk'))).then(function (data) {
+              if (data) { S = migrate(data); save(); go(S.consentGiven ? 'home' : 'onb_gate'); }
+              else { box.innerHTML = '<small class="err-text">השחזור נכשל.</small>'; }
+            });
+          };
+        });
+      });
+    };
     document.getElementById('backup').onclick = backupState;
     document.getElementById('restoreBtn').onclick = function () { document.getElementById('restoreFile').click(); };
     document.getElementById('restoreFile').onchange = function (e) {
@@ -2592,6 +2620,14 @@ import * as Storage from "./storage.js";
   // Minimal bridge for tests/debugging (read-only access to the router + state).
   // Harmless in production; lets the jsdom flow test exercise every screen.
   try { window.__gankefel = { go: go, route: function () { return route; }, state: function () { return S; }, ENGINE: E }; } catch (e) {}
+
+  // 3) Durability safety net: if localStorage was empty (e.g. evicted) but the
+  //    IndexedDB mirror has data, rehydrate and re-resolve — non-blocking.
+  try {
+    Storage.recoverIfEmpty().then(function (restored) {
+      if (restored) { Storage.migrateLegacy({ migrate: migrate, name: 'תמרי', avatar: '👑' }); bootResolveProfile(); }
+    });
+  } catch (e) {}
 
   function bootResolveProfile() {
     var activeId = Storage.getActiveProfileId();

@@ -48,7 +48,7 @@ function seedLegacy() {
 /* The app's structural backfill, passed to migrateLegacy as baseFn. */
 function backfill(s) { return s; }
 
-beforeEach(() => { installLS(); });
+beforeEach(() => { installLS(); Storage._resetDurable(); });
 
 test('legacy migration creates the "תמרי" profile with ALL data intact', () => {
   const legacy = seedLegacy();
@@ -148,4 +148,43 @@ test('applyMigrations stamps the blob up to the current schema version', () => {
   const blob = Storage.applyMigrations({ schemaVersion: 0, foo: 1 }, {}, (s) => { s.backfilled = true; return s; });
   assert.equal(blob.schemaVersion, Storage.SCHEMA_VERSION);
   assert.equal(blob.backfilled, true);
+});
+
+test('durable mirror lets recoverIfEmpty rehydrate after localStorage is wiped', async () => {
+  const a = Storage.createProfile({ name: 'A' }, { cards: [{ id: '1' }], rewards: { stars: 5 } });
+  // Simulate localStorage eviction: clear the layer's keys (durable mirror remains).
+  Storage._clearAll();
+  assert.equal(Storage.getRegistry().profiles.length, 0);
+  const restored = await Storage.recoverIfEmpty();
+  assert.equal(restored, true);
+  assert.equal(Storage.listProfiles().length, 1);
+  assert.equal(Storage.loadProfileState(a.id).rewards.stars, 5);
+});
+
+test('recoverIfEmpty is a no-op when localStorage already has data', async () => {
+  Storage.createProfile({ name: 'A' }, { cards: [], rewards: {} });
+  const restored = await Storage.recoverIfEmpty();
+  assert.equal(restored, false);
+});
+
+test('autoBackup throttles per day, lists newest, and restores a snapshot', async () => {
+  const a = Storage.createProfile({ name: 'A' }, { cards: [], rewards: { stars: 1 } });
+  assert.equal(await Storage.autoBackup(a.id, { cards: [], rewards: { stars: 1 } }, { dayKey: '2026-1-1' }), true);
+  assert.equal(await Storage.autoBackup(a.id, { cards: [], rewards: { stars: 2 } }, { dayKey: '2026-1-1' }), false, 'same day is throttled');
+  assert.equal(await Storage.autoBackup(a.id, { cards: [], rewards: { stars: 9 } }, { dayKey: '2026-1-2' }), true);
+  const list = await Storage.listBackups(a.id);
+  assert.equal(list.length, 2);
+  const day1 = list.find((b) => b.day === '2026-1-1');
+  const data = await Storage.restoreBackup(a.id, day1.id);
+  assert.equal(data.rewards.stars, 1);
+  assert.equal(Storage.loadProfileState(a.id).rewards.stars, 1);
+});
+
+test('autoBackup prunes snapshots to the keep limit', async () => {
+  const a = Storage.createProfile({ name: 'A' }, { cards: [], rewards: {} });
+  for (let i = 1; i <= 10; i++) {
+    await Storage.autoBackup(a.id, { cards: [], rewards: { n: i } }, { dayKey: 'd' + i, keep: 3 });
+  }
+  const list = await Storage.listBackups(a.id);
+  assert.equal(list.length, 3);
 });
