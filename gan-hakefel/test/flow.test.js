@@ -130,6 +130,14 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   assert.ok(dash.includes('עובדות בסיכון'), 'dashboard shows the at-risk forecast');
   assert.ok(dash.includes('תחזית שליטה'), 'dashboard shows the mastery-date forecast');
   assert.ok(dash.includes('השוואת פרופילים'), 'dashboard shows the profile comparison');
+
+  // Accessibility: boot applied a text-scale attribute, and settings expose the controls.
+  assert.ok(window.document.documentElement.getAttribute('data-textscale'), 'a11y text-scale applied at boot');
+  bridge.go('parent_settings');
+  const settings = window.document.getElementById('app').innerHTML;
+  assert.ok(settings.includes('נגישות'), 'settings has an accessibility section');
+  assert.ok(window.document.getElementById('textScale'), 'text-size control present');
+  assert.ok(window.document.getElementById('tg_readAloud'), 'read-aloud toggle present');
 });
 
 test('fresh boot (no data) shows onboarding, not a game', async () => {

@@ -296,6 +296,14 @@
   .buddy-pick{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .buddy-opt{min-width:64px}
   .buddy-opt.sel{border-color:var(--sun-dark);background:#fff7d9}
+  /* ===== accessibility: text size + dyslexia-friendly mode ===== */
+  html[data-textscale="large"] body{font-size:21px}
+  html[data-textscale="huge"] body{font-size:25px}
+  html.dyslexia body{
+    font-family:"Comic Sans MS","Trebuchet MS",Verdana,var(--font);
+    letter-spacing:.04em; word-spacing:.12em; line-height:1.75;
+  }
+  html.dyslexia p,html.dyslexia .muted{max-width:34ch}
   .hud{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:900}
   .hud-score{color:var(--sun-dark)} .hud-combo{color:#ff6a3d; min-height:1.4em}
   .hud-combo.pulse{animation:pop .35s ease}

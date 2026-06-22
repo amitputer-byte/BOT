@@ -27,7 +27,7 @@ import * as Storage from "./storage.js";
     return {
       version: 2, consentGiven: false, baselineDone: false,
       child: { nickname: 'תמרי', avatar: '👑', accessories: [] },
-      settings: { sound: true, music: false, zen: false, haptics: true, reducedMotion: false, analytics: true, localOnly: true, sessionLength: 8, freeEntry: true, theme: 'auto' },
+      settings: { sound: true, music: false, zen: false, haptics: true, reducedMotion: false, analytics: true, localOnly: true, sessionLength: 8, freeEntry: true, theme: 'auto', readAloud: true, textScale: 'normal', dyslexia: false },
       cards: E.buildFactSpace(),
       rewards: { stars: 0, unlocked: [], badges: [], bossDone: [], decor: [], accessories: [], chests: 0, chestProgress: 0, rankSeen: 0 },
       collection: { pets: {}, buddy: null },
@@ -111,8 +111,9 @@ import * as Storage from "./storage.js";
   /* ---------- audio + a11y ---------- */
   function speak(text) {
     var region = document.getElementById('speak-region');
-    if (region) region.textContent = text;
-    if (!S.settings.sound || !('speechSynthesis' in window)) return;
+    if (region) region.textContent = text; // always update the aria-live region
+    // Read-aloud is its own accessibility control, independent of SFX/music.
+    if (!S.settings.readAloud || !('speechSynthesis' in window)) return;
     try {
       window.speechSynthesis.cancel();
       var u = new SpeechSynthesisUtterance(text);
@@ -138,6 +139,14 @@ import * as Storage from "./storage.js";
       root.setAttribute('data-theme', theme);
       var hr = new Date().getHours();
       root.setAttribute('data-time', (hr >= 6 && hr < 18) ? 'day' : 'night');
+    } catch (e) {}
+  }
+  /* Accessibility: text size + dyslexia-friendly spacing/font. */
+  function applyA11y() {
+    try {
+      var root = document.documentElement;
+      root.setAttribute('data-textscale', (S.settings && S.settings.textScale) || 'normal');
+      root.classList.toggle('dyslexia', !!(S.settings && S.settings.dyslexia));
     } catch (e) {}
   }
 
@@ -2471,6 +2480,15 @@ import * as Storage from "./storage.js";
         .map(function (o) { return '<option value="' + o[0] + '"' + ((S.settings.theme || 'auto') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
       '</select></div></div>' +
 
+      '<div class="card"><h3>נגישות</h3>' +
+      toggleRow('readAloud', 'הקראת שאלות (קול)', S.settings.readAloud) +
+      toggleRow('dyslexia', 'מצב ידידותי לדיסלקציה', S.settings.dyslexia) +
+      '<div class="row between" style="margin-top:10px"><span>גודל טקסט</span>' +
+      '<select id="textScale" class="input" style="width:auto;min-height:48px">' +
+      [['normal', 'רגיל'], ['large', 'גדול'], ['huge', 'ענק']]
+        .map(function (o) { return '<option value="' + o[0] + '"' + ((S.settings.textScale || 'normal') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+      '</select></div></div>' +
+
       '<div class="card"><h3>גיבוי ושחזור</h3>' +
       '<p class="muted">מצב מקומי בלבד — מומלץ לשמור גיבוי מדי פעם, כדי לא לאבד התקדמות אם הטאבלט יאופס.</p>' +
       '<div class="btn-row"><button class="btn btn-soft btn-sm" id="backup">⬇️ גיבוי לקובץ</button>' +
@@ -2493,8 +2511,10 @@ import * as Storage from "./storage.js";
 
     document.getElementById('back').onclick = function () { go('parent_dash'); };
     bindToggle('sound'); bindToggle('music'); bindToggle('haptics'); bindToggle('reducedMotion'); bindToggle('analytics'); bindToggle('freeEntry');
+    bindToggle('readAloud'); bindToggle('dyslexia');
     document.getElementById('len').onchange = function (e) { S.settings.sessionLength = Number(e.target.value); save(); };
     document.getElementById('theme').onchange = function (e) { S.settings.theme = e.target.value; save(); applyTheme(); };
+    document.getElementById('textScale').onchange = function (e) { S.settings.textScale = e.target.value; save(); applyA11y(); };
     document.getElementById('backup').onclick = backupState;
     document.getElementById('restoreBtn').onclick = function () { document.getElementById('restoreFile').click(); };
     document.getElementById('restoreFile').onchange = function (e) {
@@ -2531,6 +2551,8 @@ import * as Storage from "./storage.js";
       logEvent(EV.privacy_setting_changed, { key: key, value: el.checked });
       if (key === 'sound' && el.checked) speak('הקול מופעל');
       if (key === 'music') { if (el.checked) FX.startMusic(); else FX.stopMusic(); }
+      if (key === 'dyslexia') applyA11y();
+      if (key === 'readAloud' && el.checked) speak('ההקראה מופעלת');
     };
   }
 
@@ -2577,7 +2599,7 @@ import * as Storage from "./storage.js";
     if (activeId && Storage.getProfile(activeId)) {
       activeProfileId = activeId;
       S = loadActiveState();
-      applyTheme();
+      applyTheme(); applyA11y();
       logEvent(EV.app_open, {}); save();
       if (S.consentGiven && S.baselineDone && checkLogin()) { go('daily_gift'); }
       else { go(S.consentGiven ? 'home' : 'onb_gate'); }
