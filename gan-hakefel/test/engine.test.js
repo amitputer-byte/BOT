@@ -163,33 +163,31 @@ test('hebrewNumberWords spells the worksheet examples', () => {
 test('every grade-3 generator produces a well-formed, correct question', () => {
   const keys = E.G3_TOPICS.map((t) => t.key).concat(['mix']);
   for (const key of keys) {
-    for (let i = 0; i < 120; i++) {
-      const q = E.buildG3Question(key, Math.random);
-      assert.ok(q && typeof q.prompt === 'string' && q.prompt.length > 0, 'prompt: ' + key);
-      assert.ok(q.answer !== undefined && q.answer !== null, 'answer: ' + key + ' / ' + q.type);
-      if (q.input === 'choice') {
-        assert.ok(Array.isArray(q.choices) && q.choices.length >= 2, 'choices present: ' + q.type);
-        assert.ok(q.choices.indexOf(q.answer) >= 0, 'answer in choices: ' + q.type);
-        assert.equal(new Set(q.choices.map(String)).size, q.choices.length, 'choices unique: ' + q.type);
-      } else {
-        assert.equal(typeof q.answer, 'number', 'numeric answer: ' + q.type);
-        assert.ok(isFinite(q.answer), 'finite answer: ' + q.type);
+    for (const level of [1, 2, 3]) {
+      for (let i = 0; i < 60; i++) {
+        const q = E.buildG3Question(key, Math.random, level);
+        assert.ok(q && typeof q.prompt === 'string' && q.prompt.length > 0, 'prompt: ' + key);
+        assert.ok(q.answer !== undefined && q.answer !== null, 'answer: ' + key + ' / ' + q.type);
+        if (q.input === 'choice') {
+          assert.ok(Array.isArray(q.choices) && q.choices.length >= 2, 'choices present: ' + q.type);
+          assert.ok(q.choices.indexOf(q.answer) >= 0, 'answer in choices: ' + q.type);
+          assert.equal(new Set(q.choices.map(String)).size, q.choices.length, 'choices unique: ' + q.type);
+        } else {
+          assert.equal(typeof q.answer, 'number', 'numeric answer: ' + q.type);
+          assert.ok(isFinite(q.answer) && q.answer >= 0, 'finite non-negative answer: ' + q.type + ' = ' + q.answer);
+        }
       }
     }
   }
 });
 
-test('grade-3 answers are actually correct for a few types', () => {
-  // deterministic rng sequence to exercise specific generators
-  const seq = [0.0, 0.5, 0.9, 0.2, 0.7, 0.33, 0.66, 0.1];
-  let k = 0; const rng = () => seq[(k++) % seq.length];
-  // sanity: arithmetic answers equal the computed op for many random draws
-  for (let i = 0; i < 200; i++) {
-    const q = E.buildG3Question('arithmetic', Math.random);
-    const m = q.prompt.match(/^(\d+)\s*([+−×:])\s*(\d+)(?:\s*\+\s*(\d+))?/);
+test('grade-3 arithmetic answers are actually correct', () => {
+  for (let i = 0; i < 400; i++) {
+    const q = E.buildG3Question('arithmetic', Math.random, (i % 3) + 1);
+    const m = q.prompt.match(/^(\d+) ([+−×:]) (\d+) =$/); // single-op only
     if (!m) continue;
     const a = +m[1], b = +m[3];
-    if (m[2] === '+') assert.equal(q.answer, m[4] ? a + b + (+m[4]) : a + b);
+    if (m[2] === '+') assert.equal(q.answer, a + b);
     if (m[2] === '−') assert.equal(q.answer, a - b);
     if (m[2] === '×') assert.equal(q.answer, a * b);
     if (m[2] === ':') assert.equal(q.answer, a / b);

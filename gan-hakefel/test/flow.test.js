@@ -118,6 +118,11 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   // The geometry/data topics render a visual; number topics render choices or input.
   bridge.go('practice_hub');
   assert.ok(window.document.getElementById('app').innerHTML.includes('כיתה ג'), 'hub lists grade-3 topics');
+  assert.ok(window.document.querySelector('#g3lvl .seg-btn'), 'hub shows difficulty selector');
+  // Switching difficulty updates the stored level.
+  const hardBtn = [...window.document.querySelectorAll('#g3lvl .seg-btn')].find((b) => b.getAttribute('data-lvl') === '3');
+  hardBtn.click();
+  assert.equal(bridge.state().settings.g3Level, 3, 'difficulty selector sets the level');
 
   // Grade-3 numeric answer flow: solve an arithmetic item and it is accepted.
   bridge.go('g3', { topic: 'arithmetic' });

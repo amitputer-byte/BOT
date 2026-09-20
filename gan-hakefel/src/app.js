@@ -27,7 +27,7 @@ import * as Storage from "./storage.js";
     return {
       version: 2, consentGiven: false, baselineDone: false,
       child: { nickname: 'תמרי', avatar: '👑', accessories: [] },
-      settings: { sound: true, music: false, zen: false, haptics: true, reducedMotion: false, analytics: true, localOnly: true, sessionLength: 8, freeEntry: true, theme: 'auto', readAloud: true, textScale: 'normal', dyslexia: false },
+      settings: { sound: true, music: false, zen: false, haptics: true, reducedMotion: false, analytics: true, localOnly: true, sessionLength: 8, freeEntry: true, theme: 'auto', readAloud: true, textScale: 'normal', dyslexia: false, g3Level: 2 },
       cards: E.buildFactSpace(),
       rewards: { stars: 0, unlocked: [], badges: [], bossDone: [], decor: [], accessories: [], chests: 0, chestProgress: 0, rankSeen: 0 },
       collection: { pets: {}, buddy: null },
@@ -1763,6 +1763,10 @@ import * as Storage from "./storage.js";
 
       '<div class="card"><div class="row between"><h3 style="margin:0">כיתה ג\' — כל הנושאים</h3>' +
       '<button class="btn btn-sun btn-sm" id="g3mix" style="width:auto">🎲 מבחן מעורב</button></div>' +
+      '<div class="row between" style="margin:6px 0"><span class="muted">רמת קושי</span>' +
+      '<div class="seg" id="g3lvl">' +
+      [[1, 'קל'], [2, 'בינוני'], [3, 'קשה']].map(function (o) { return '<button class="seg-btn' + ((S.settings.g3Level || 2) === o[0] ? ' on' : '') + '" data-lvl="' + o[0] + '">' + o[1] + '</button>'; }).join('') +
+      '</div></div>' +
       '<div class="grid2">' + g3tiles +
       '<div class="tile" tabindex="0" role="button" id="wordtile"><span class="emoji">📖</span>בעיות מילוליות</div>' +
       '</div>' +
@@ -1773,6 +1777,9 @@ import * as Storage from "./storage.js";
     bindBtn('addv', function () { run = null; go('practice_add_v'); });
     bindBtn('wordtile', function () { run = null; go('practice_word'); });
     bindBtn('g3mix', function () { run = null; go('g3', { topic: 'mix' }); });
+    Array.prototype.forEach.call(app.querySelectorAll('#g3lvl .seg-btn'), function (b) {
+      b.onclick = function () { S.settings.g3Level = Number(b.getAttribute('data-lvl')); save(); render(); };
+    });
     Array.prototype.forEach.call(app.querySelectorAll('[data-g3]'), function (t) {
       var fn = function () { run = null; go('g3', { topic: t.getAttribute('data-g3') }); };
       t.onclick = fn; t.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } };
@@ -1798,6 +1805,17 @@ import * as Storage from "./storage.js";
       for (var c = 0; c < v.w * v.h; c++) cells += '<span class="g3sq"></span>';
       return '<div class="g3grid" style="grid-template-columns:repeat(' + v.w + ',24px)">' + cells + '</div>';
     }
+    if (v.kind === 'poly') {
+      var on = {}; v.cells.forEach(function (p) { on[p[0] + ',' + p[1]] = 1; });
+      var g = '';
+      for (var y = 0; y < v.h; y++) for (var x = 0; x < v.w; x++) g += '<span class="g3sq' + (on[x + ',' + y] ? '' : ' empty') + '"></span>';
+      return '<div class="g3grid" style="grid-template-columns:repeat(' + v.w + ',24px)">' + g + '</div>';
+    }
+    if (v.kind === 'pict') {
+      return '<div class="g3pict">' + v.rows.map(function (r) {
+        return '<div class="g3pictrow"><span class="g3pictlbl">' + r.label + '</span><span class="g3picticons">' + new Array(r.count + 1).join(r.icon) + '</span></div>';
+      }).join('') + '</div>';
+    }
     if (v.kind === 'bars') {
       return '<div class="g3bars">' + v.vals.map(function (val, i) {
         var col = ''; for (var u = 0; u < val; u++) col += '<span class="g3unit"></span>';
@@ -1809,7 +1827,7 @@ import * as Storage from "./storage.js";
   function renderG3(topic) {
     if (!run || run.game !== 'g3' || run.topic !== topic) { run = { game: 'g3', topic: topic, round: 0, n: 8, correct: 0, stars0: S.rewards.stars, score: 0, combo: 0 }; logEvent(EV.game_started, { game: 'g3:' + topic }); }
     if (run.round >= run.n) { var tt = E.g3Topic(topic); return finishPractice((tt ? tt.emoji + ' ' + tt.label : '🎓 כיתה ג\'')); }
-    if (!run.q || run.qRound !== run.round) { run.q = E.buildG3Question(topic, Math.random); run.qRound = run.round; run.hadWrong = false; }
+    if (!run.q || run.qRound !== run.round) { run.q = E.buildG3Question(topic, Math.random, S.settings.g3Level || 2); run.qRound = run.round; run.hadWrong = false; }
     var q = run.q;
     var body;
     if (q.input === 'choice') {
