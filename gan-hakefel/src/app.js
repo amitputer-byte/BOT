@@ -534,6 +534,7 @@ import * as Storage from "./storage.js";
       case 'practice_add_h': return renderAddHoriz();
       case 'practice_add_v': return renderAddVert();
       case 'practice_word': return renderWordProblems();
+      case 'g3': return renderG3(route.params.topic || 'mix');
       case 'shop': return renderShop();
       case 'garden_builder': return renderGardenBuilder();
       case 'world_map': return renderWorldMap();
@@ -1718,12 +1719,16 @@ import * as Storage from "./storage.js";
    * A separate activity area. It awards a little currency but deliberately does
    * NOT feed the multiplication mastery state, ranks or the journey map. */
   function practiceStats() {
-    if (!S.stats.practice) S.stats.practice = { addCorrect: 0, addTotal: 0, wordCorrect: 0, wordTotal: 0 };
-    return S.stats.practice;
+    var p = S.stats.practice || (S.stats.practice = {});
+    ['add', 'word', 'g3'].forEach(function (k) {
+      if (typeof p[k + 'Correct'] !== 'number') p[k + 'Correct'] = 0;
+      if (typeof p[k + 'Total'] !== 'number') p[k + 'Total'] = 0;
+    });
+    return p;
   }
   function practiceGrade(kind, correct) {
     var pr = practiceStats();
-    var key = (kind === 'word') ? 'word' : 'add';
+    var key = (kind === 'word') ? 'word' : (kind === 'g3') ? 'g3' : 'add';
     pr[key + 'Total']++;
     if (correct) { pr[key + 'Correct']++; awardStars(1, 'practice:' + kind); bumpDaily(1, 0); }
     bumpWeekly('practice', 1);
@@ -1743,21 +1748,121 @@ import * as Storage from "./storage.js";
     var pr = practiceStats();
     var addAcc = pr.addTotal ? Math.round(pr.addCorrect / pr.addTotal * 100) : 0;
     var wordAcc = pr.wordTotal ? Math.round(pr.wordCorrect / pr.wordTotal * 100) : 0;
+    var g3Acc = pr.g3Total ? Math.round(pr.g3Correct / pr.g3Total * 100) : 0;
+    var g3tiles = E.G3_TOPICS.map(function (t) {
+      return '<div class="tile" tabindex="0" role="button" data-g3="' + t.key + '"><span class="emoji">' + t.emoji + '</span>' + t.label + '</div>';
+    }).join('');
     app.innerHTML = '<div class="screen">' + topbar(false) +
       '<div class="card"><div class="row between"><h2 style="margin:0">📝 מרכז התרגול</h2><button class="link" id="back">בית</button></div>' +
-      '<p class="muted">חיבור עד 100 ושאלות מילוליות — תרגול נפרד ממסע הכפל.</p>' +
-      '<div class="grid2">' +
+      '<p class="muted">תרגול נפרד ממסע הכפל — בסגנון מבחני המיפוי של כיתה ג\'.</p></div>' +
+
+      '<div class="card"><h3>חיבור עד 100</h3><div class="grid2">' +
       '<div class="tile" tabindex="0" role="button" id="addh"><span class="emoji">➕</span>חיבור במאוזן<small class="muted">a + b = ?</small></div>' +
       '<div class="tile" tabindex="0" role="button" id="addv"><span class="emoji">🧮</span>חיבור במאונך<small class="muted">עם נשיאה</small></div>' +
-      '<div class="tile" tabindex="0" role="button" id="word"><span class="emoji">📖</span>שאלות מילוליות<small class="muted">כפל וחיבור</small></div>' +
+      '</div><small class="muted">דיוק חיבור: <b>' + addAcc + '%</b> (' + pr.addTotal + ')</small></div>' +
+
+      '<div class="card"><div class="row between"><h3 style="margin:0">כיתה ג\' — כל הנושאים</h3>' +
+      '<button class="btn btn-sun btn-sm" id="g3mix" style="width:auto">🎲 מבחן מעורב</button></div>' +
+      '<div class="grid2">' + g3tiles +
+      '<div class="tile" tabindex="0" role="button" id="wordtile"><span class="emoji">📖</span>בעיות מילוליות</div>' +
       '</div>' +
-      '<p class="muted" style="margin-top:10px">דיוק חיבור: <b>' + addAcc + '%</b> (' + pr.addTotal + ' תרגילים) · שאלות מילוליות: <b>' + wordAcc + '%</b> (' + pr.wordTotal + ')</p>' +
-      '</div></div>';
+      '<small class="muted">דיוק כיתה ג\': <b>' + g3Acc + '%</b> (' + pr.g3Total + ') · בעיות מילוליות: <b>' + wordAcc + '%</b> (' + pr.wordTotal + ')</small></div>' +
+      '</div>';
     bindBtn('back', function () { go('home'); });
     bindBtn('addh', function () { run = null; go('practice_add_h'); });
     bindBtn('addv', function () { run = null; go('practice_add_v'); });
-    bindBtn('word', function () { run = null; go('practice_word'); });
+    bindBtn('wordtile', function () { run = null; go('practice_word'); });
+    bindBtn('g3mix', function () { run = null; go('g3', { topic: 'mix' }); });
+    Array.prototype.forEach.call(app.querySelectorAll('[data-g3]'), function (t) {
+      var fn = function () { run = null; go('g3', { topic: t.getAttribute('data-g3') }); };
+      t.onclick = fn; t.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } };
+    });
   }
+
+  /* ---- grade-3 practice runner (all worksheet topics) ---- */
+  function g3VisualHTML(v) {
+    if (!v) return '';
+    if (v.kind === 'numline') {
+      var W = 300, pad = 18, n = 10, span = W - 2 * pad, step = span / n;
+      var mx = pad + (v.mark / v.max) * span, s = '';
+      for (var i = 0; i <= n; i++) { var x = pad + i * step; s += '<line x1="' + x.toFixed(1) + '" y1="30" x2="' + x.toFixed(1) + '" y2="42" stroke="#456" stroke-width="2"/>'; }
+      s += '<line x1="' + pad + '" y1="42" x2="' + (W - pad) + '" y2="42" stroke="#456" stroke-width="2"/>';
+      s += '<text x="' + pad + '" y="58" font-size="12" text-anchor="middle">0</text>';
+      s += '<text x="' + (W - pad) + '" y="58" font-size="12" text-anchor="middle">' + v.max + '</text>';
+      s += '<polygon points="' + mx.toFixed(1) + ',12 ' + (mx - 7).toFixed(1) + ',26 ' + (mx + 7).toFixed(1) + ',26" fill="#e23b3b"/>';
+      s += '<text x="' + mx.toFixed(1) + '" y="10" font-size="14" text-anchor="middle" fill="#e23b3b">?</text>';
+      return '<svg class="g3vis" viewBox="0 0 ' + W + ' 64" width="100%" height="76" style="direction:ltr">' + s + '</svg>';
+    }
+    if (v.kind === 'grid') {
+      var cells = '';
+      for (var c = 0; c < v.w * v.h; c++) cells += '<span class="g3sq"></span>';
+      return '<div class="g3grid" style="grid-template-columns:repeat(' + v.w + ',24px)">' + cells + '</div>';
+    }
+    if (v.kind === 'bars') {
+      return '<div class="g3bars">' + v.vals.map(function (val, i) {
+        var col = ''; for (var u = 0; u < val; u++) col += '<span class="g3unit"></span>';
+        return '<div class="g3bar"><div class="g3barcol">' + col + '</div><span class="g3barlbl">' + v.cats[i] + '</span></div>';
+      }).join('') + '</div>';
+    }
+    return '';
+  }
+  function renderG3(topic) {
+    if (!run || run.game !== 'g3' || run.topic !== topic) { run = { game: 'g3', topic: topic, round: 0, n: 8, correct: 0, stars0: S.rewards.stars, score: 0, combo: 0 }; logEvent(EV.game_started, { game: 'g3:' + topic }); }
+    if (run.round >= run.n) { var tt = E.g3Topic(topic); return finishPractice((tt ? tt.emoji + ' ' + tt.label : '🎓 כיתה ג\'')); }
+    if (!run.q || run.qRound !== run.round) { run.q = E.buildG3Question(topic, Math.random); run.qRound = run.round; run.hadWrong = false; }
+    var q = run.q;
+    var body;
+    if (q.input === 'choice') {
+      body = '<div class="choices" id="choices">' + q.choices.map(function (v) { return '<button class="choice g3choice" data-v="' + escapeHtml(String(v)) + '"><span class="num">' + escapeHtml(String(v)) + '</span></button>'; }).join('') + '</div>';
+    } else {
+      body = '<div class="g3answer"><input class="input g3in" id="g3in" inputmode="numeric" autocomplete="off" aria-label="תשובה"' + (q.unit ? ' style="max-width:120px"' : '') + '>' + (q.unit ? '<span class="g3unitlbl">' + q.unit + '</span>' : '') +
+        '<button class="btn btn-primary btn-sm" id="g3check" style="width:auto">בדיקה</button></div>';
+    }
+    app.innerHTML = '<div class="screen">' + topbar(false) +
+      '<div class="card center">' + comboHud(run) +
+      '<h3 style="line-height:1.6">' + q.prompt + '</h3>' +
+      g3VisualHTML(q.visual) +
+      '<p class="muted">(' + (run.round + 1) + '/' + run.n + ')</p>' +
+      body +
+      '<div class="feedback" id="fb"></div>' +
+      '<button class="btn btn-soft btn-sm" id="say" style="width:auto;margin-top:8px">🔊 שמע</button>' +
+      '</div></div>';
+    if (q.speak) speak(q.speak);
+    bindBtn('say', function () { if (q.speak) speak(q.speak); });
+    function correct() {
+      FX.sfx(run.combo >= 2 ? 'combo' : 'correct');
+      run.combo++; run.score += 10 * Math.max(1, run.combo); if (!run.hadWrong) run.correct++; hudUpdate(run);
+      practiceGrade('g3', !run.hadWrong);
+      var fb = document.getElementById('fb'); fb.className = 'feedback good'; fb.textContent = cheer(CHAMP.success);
+      FX.addTimer(setTimeout(function () { run.round++; render(); }, 700));
+    }
+    function wrong(msg) {
+      run.hadWrong = true; run.combo = 0; hudUpdate(run); FX.sfx('wrong');
+      var fb = document.getElementById('fb'); fb.className = 'feedback bad'; fb.textContent = msg || 'לא בדיוק, נסי שוב!';
+    }
+    if (q.input === 'choice') {
+      var answered = false;
+      Array.prototype.forEach.call(app.querySelectorAll('.g3choice'), function (bn) {
+        bn.onclick = function () {
+          if (answered) return;
+          if (String(bn.getAttribute('data-v')) === String(q.answer)) { answered = true; bn.classList.add('correct'); FX.burstAt(bn, '#3aa76d', 14); correct(); }
+          else { bn.classList.add('shake'); wrong('לא בדיוק, נסי שוב!'); setTimeout(function () { bn.classList.remove('shake'); }, 400); }
+        };
+      });
+    } else {
+      var done = false;
+      var check = function () {
+        if (done) return;
+        var el = document.getElementById('g3in'); var val = (el && el.value || '').trim();
+        if (val === '') { wrong('כתבי תשובה ולחצי בדיקה.'); return; }
+        if (Number(val) === Number(q.answer)) { done = true; correct(); }
+        else { wrong('לא בדיוק, נסי שוב!'); }
+      };
+      bindBtn('g3check', check);
+      var inp = document.getElementById('g3in'); if (inp) { inp.focus(); inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); check(); } }; }
+    }
+  }
+
 
   /* Horizontal addition (a + b = ?), multiple choice. */
   function renderAddHoriz() {

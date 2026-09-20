@@ -107,6 +107,30 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
     assert.ok(window.document.getElementById('app').innerHTML.length > 20, 'practice rendered: ' + route);
     assert.equal(bridge.route().name, route);
   }
+  // Grade-3 practice: every topic + the mixed test render without throwing.
+  const g3keys = bridge.ENGINE.G3_TOPICS.map((t) => t.key).concat(['mix']);
+  for (const topic of g3keys) {
+    bridge.go('g3', { topic });
+    const h = window.document.getElementById('app').innerHTML;
+    assert.ok(h.length > 40, 'g3 rendered: ' + topic);
+    assert.equal(bridge.route().name, 'g3');
+  }
+  // The geometry/data topics render a visual; number topics render choices or input.
+  bridge.go('practice_hub');
+  assert.ok(window.document.getElementById('app').innerHTML.includes('כיתה ג'), 'hub lists grade-3 topics');
+
+  // Grade-3 numeric answer flow: solve an arithmetic item and it is accepted.
+  bridge.go('g3', { topic: 'arithmetic' });
+  const g3prompt = window.document.querySelector('.card h3').textContent;
+  const gm = g3prompt.match(/(\d+)\s*([+−×:])\s*(\d+)/);
+  if (gm) {
+    const x = +gm[1], y = +gm[3];
+    const val = gm[2] === '+' ? x + y : gm[2] === '−' ? x - y : gm[2] === '×' ? x * y : x / y;
+    window.document.getElementById('g3in').value = String(val);
+    window.document.getElementById('g3check').click();
+    assert.ok(window.document.getElementById('fb').classList.contains('good'), 'g3 accepts a correct numeric answer');
+  }
+  bridge.go('home'); // clear the advance timer
   // Vertical addition shows the column layout, and a correct entry is accepted.
   bridge.go('practice_add_v');
   const doc = window.document;

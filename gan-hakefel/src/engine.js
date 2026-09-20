@@ -520,6 +520,172 @@ function seasonalTheme(month) {
   return 'autumn';                                                 // Sep-Nov
 }
 
+/* ============================================================================
+ * Grade-3 practice generators (מיפוי תחילת שנה) — a broad, endless bank of
+ * exercises modelled on real 3rd-grade worksheets: place value, number words,
+ * predecessor/successor, comparison, sequences, number line, the four
+ * operations, missing-number / inverse, word problems, geometry and data.
+ * All pure: each generator takes an rng and returns a normalized question
+ *   { type, prompt, speak, visual?, input:'number'|'choice', answer, choices?, unit? }
+ * ==========================================================================*/
+function g3rnd(rng, lo, hi) { return lo + Math.floor((rng || Math.random)() * (hi - lo + 1)); }
+function g3shuffle(rng, arr) { for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor((rng || Math.random)() * (i + 1)); var t = arr[i]; arr[i] = arr[j]; arr[j] = t; } return arr; }
+function g3choices(rng, answer, distractors) {
+  var set = {}, out = [answer]; set[String(answer)] = 1;
+  g3shuffle(rng, distractors);
+  for (var i = 0; i < distractors.length && out.length < 4; i++) { var d = distractors[i]; if (d != null && !set[String(d)]) { set[String(d)] = 1; out.push(d); } }
+  return g3shuffle(rng, out);
+}
+
+/* Hebrew number words 0..999 (feminine counting form, as in the worksheets). */
+var HE_ONES_F = ['אפס', 'אחת', 'שתיים', 'שלוש', 'ארבע', 'חמש', 'שש', 'שבע', 'שמונה', 'תשע'];
+var HE_TEENS_F = ['עשר', 'אחת עשרה', 'שתים עשרה', 'שלוש עשרה', 'ארבע עשרה', 'חמש עשרה', 'שש עשרה', 'שבע עשרה', 'שמונה עשרה', 'תשע עשרה'];
+var HE_TENS = ['', 'עשר', 'עשרים', 'שלושים', 'ארבעים', 'חמישים', 'שישים', 'שבעים', 'שמונים', 'תשעים'];
+var HE_HUNDREDS = ['', 'מאה', 'מאתיים', 'שלוש מאות', 'ארבע מאות', 'חמש מאות', 'שש מאות', 'שבע מאות', 'שמונה מאות', 'תשע מאות'];
+function hebrewNumberWords(n) {
+  n = Math.max(0, Math.min(999, Math.floor(n)));
+  if (n === 0) return 'אפס';
+  var h = Math.floor(n / 100), rem = n % 100, tok = [];
+  if (h > 0) tok.push(HE_HUNDREDS[h]);
+  if (rem > 0) {
+    if (rem < 10) tok.push(HE_ONES_F[rem]);
+    else if (rem < 20) tok.push(HE_TEENS_F[rem - 10]);
+    else { var t = Math.floor(rem / 10), u = rem % 10; tok.push(HE_TENS[t]); if (u > 0) tok.push(HE_ONES_F[u]); }
+  }
+  if (tok.length === 1) return tok[0];
+  return tok.slice(0, -1).join(' ') + ' ו' + tok[tok.length - 1];
+}
+
+/* ---- numbers ---- */
+function gNumWords(rng) {
+  var n = g3rnd(rng, 21, 999);
+  var cand = [n + 1, n - 1, n + 10, n - 10, n + 2, n - 2].filter(function (x) { return x >= 0 && x <= 999 && x !== n; });
+  return { type: 'numwords', prompt: 'איך כותבים את המספר ' + n + ' במילים?', speak: 'איך כותבים את המספר ' + n + '?',
+    input: 'choice', answer: hebrewNumberWords(n), choices: g3choices(rng, hebrewNumberWords(n), cand.map(hebrewNumberWords)) };
+}
+function gPredSucc(rng) {
+  var n = g3rnd(rng, 21, 997), after = g3rnd(rng, 0, 1) === 1;
+  return { type: 'predsucc', prompt: 'איזה מספר בא ' + (after ? 'אחרי' : 'לפני') + ' ' + n + '?', speak: 'איזה מספר בא ' + (after ? 'אחרי' : 'לפני') + ' ' + n, input: 'number', answer: after ? n + 1 : n - 1 };
+}
+function gCompare(rng) {
+  var a = g3rnd(rng, 10, 999), b = g3rnd(rng, 0, 3) === 0 ? a : g3rnd(rng, 10, 999);
+  return { type: 'compare', prompt: 'איזה סימן מתאים?   ' + a + '   ⬚   ' + b, speak: 'איזה סימן מתאים בין ' + a + ' ל ' + b, input: 'choice', choices: ['<', '>', '='], answer: a > b ? '>' : a < b ? '<' : '=' };
+}
+function gPlaceValue(rng) {
+  var n = g3rnd(rng, 100, 999), which = g3rnd(rng, 0, 2), names = ['האחדות', 'העשרות', 'המאות'];
+  var dig = which === 0 ? n % 10 : which === 1 ? Math.floor(n / 10) % 10 : Math.floor(n / 100);
+  return { type: 'placevalue', prompt: 'מהי ספרת ' + names[which] + ' במספר ' + n + '?', speak: 'מהי ספרת ' + names[which] + ' במספר ' + n, input: 'number', answer: dig };
+}
+function gFormNumber(rng) {
+  var ds = g3shuffle(rng, [1, 2, 3, 4, 5, 6, 7, 8, 9]).slice(0, 3), big = g3rnd(rng, 0, 1) === 1;
+  var sorted = ds.slice().sort(function (x, y) { return x - y; });
+  var ans = Number((big ? sorted.slice().reverse() : sorted).join(''));
+  return { type: 'formnum', prompt: 'מהו המספר התלת-ספרתי ה' + (big ? 'גדול' : 'קטן') + ' ביותר שאפשר להרכיב מהספרות ' + ds.join(', ') + '?', speak: 'הרכיבו את המספר ה' + (big ? 'גדול' : 'קטן') + ' ביותר', input: 'number', answer: ans };
+}
+
+/* ---- sequences ---- */
+function gSequence(rng) {
+  var steps = [1, 2, 5, 10, 10, 100, 100, 1000], step = steps[g3rnd(rng, 0, steps.length - 1)];
+  if (g3rnd(rng, 0, 1) === 0) step = -step;
+  var len = 5, startMin = step < 0 ? Math.abs(step) * (len - 1) : 0, startMax = step > 0 ? 9999 - step * (len - 1) : 9999;
+  var start = g3rnd(rng, Math.max(0, startMin), Math.max(Math.max(0, startMin), Math.min(9999, startMax)));
+  var terms = [], i; for (i = 0; i < len; i++) terms.push(start + step * i);
+  var blank = g3rnd(rng, 0, len - 1);
+  var shown = terms.map(function (t, idx) { return idx === blank ? '___' : t; });
+  return { type: 'sequence', prompt: 'השלימו את הסדרה:   ' + shown.join(' , '), speak: 'השלימו את הסדרה', input: 'number', answer: terms[blank] };
+}
+
+/* ---- number line ---- */
+function gNumLineRead(rng) {
+  var max = [20, 50, 100][g3rnd(rng, 0, 2)], idx = g3rnd(rng, 1, 9), val = idx * (max / 10);
+  return { type: 'numline', prompt: 'איזה מספר מסומן על ישר המספרים?', speak: 'איזה מספר מסומן', visual: { kind: 'numline', min: 0, max: max, mark: val }, input: 'number', answer: val };
+}
+
+/* ---- arithmetic ---- */
+function gAdd(rng) { var a = g3rnd(rng, 20, 800), b = g3rnd(rng, 10, 1000 - a); return { type: 'add', prompt: a + ' + ' + b + ' =', speak: 'כמה זה ' + a + ' ועוד ' + b, input: 'number', answer: a + b }; }
+function gSub(rng) { var a = g3rnd(rng, 50, 1000), b = g3rnd(rng, 10, a); return { type: 'sub', prompt: a + ' − ' + b + ' =', speak: 'כמה זה ' + a + ' פחות ' + b, input: 'number', answer: a - b }; }
+function gMul(rng) { var a = g3rnd(rng, 2, 10), b = g3rnd(rng, 2, 10); return { type: 'mul', prompt: a + ' × ' + b + ' =', speak: 'כמה זה ' + a + ' כפול ' + b, input: 'number', answer: a * b }; }
+function gDiv(rng) { var b = g3rnd(rng, 2, 10), q = g3rnd(rng, 2, 10); return { type: 'div', prompt: (b * q) + ' : ' + b + ' =', speak: 'כמה זה ' + (b * q) + ' חלקי ' + b, input: 'number', answer: q }; }
+function gChain(rng) { var a = g3rnd(rng, 3, 30), b = g3rnd(rng, 3, 30), c = g3rnd(rng, 3, 30); return { type: 'chain', prompt: a + ' + ' + b + ' + ' + c + ' =', speak: 'חברו את שלושת המספרים', input: 'number', answer: a + b + c }; }
+
+/* ---- missing number / inverse ---- */
+function gMissAdd(rng) { var a = g3rnd(rng, 5, 90), s = a + g3rnd(rng, 5, 90); return { type: 'missadd', prompt: a + ' + ___ = ' + s, speak: 'מהו המספר החסר', input: 'number', answer: s - a }; }
+function gMissSub(rng) {
+  if (g3rnd(rng, 0, 1)) { var b = g3rnd(rng, 5, 50), c = g3rnd(rng, 5, 50); return { type: 'misssub', prompt: '___ − ' + b + ' = ' + c, speak: 'מהו המספר החסר', input: 'number', answer: b + c }; }
+  var a = g3rnd(rng, 20, 99), c2 = g3rnd(rng, 1, a - 1); return { type: 'misssub', prompt: a + ' − ___ = ' + c2, speak: 'מהו המספר החסר', input: 'number', answer: a - c2 };
+}
+function gMissFactor(rng) { var a = g3rnd(rng, 2, 10), q = g3rnd(rng, 2, 10); return { type: 'missfac', prompt: a + ' × ___ = ' + (a * q), speak: 'מהו הגורם החסר', input: 'number', answer: q }; }
+function gMissDiv(rng) { var b = g3rnd(rng, 2, 10), q = g3rnd(rng, 2, 10); return { type: 'missdiv', prompt: '___ : ' + b + ' = ' + q, speak: 'מהו המספר החסר', input: 'number', answer: b * q }; }
+function gBalance(rng) { var x = g3rnd(rng, 1, 20), a = g3rnd(rng, 5, 30), sum = a + x, b = g3rnd(rng, 1, sum - 1), c = sum - b; return { type: 'balance', prompt: a + ' + ___ = ' + b + ' + ' + c, speak: 'השלימו כדי לאזן', input: 'number', answer: x }; }
+
+/* ---- word problems (four operations) ---- */
+function gWordAdd(rng) {
+  var a = g3rnd(rng, 8, 60), b = g3rnd(rng, 8, 60);
+  var t = ['לתמרי ' + a + ' מדבקות והיא קיבלה עוד ' + b + '. כמה מדבקות יש לה עכשיו?',
+    'בגינה ' + a + ' פרחים אדומים ו-' + b + ' צהובים. כמה פרחים בסך הכול?',
+    'באוטובוס ' + a + ' ילדים, ובתחנה עלו עוד ' + b + '. כמה ילדים באוטובוס?'][g3rnd(rng, 0, 2)];
+  return { type: 'wordadd', prompt: t, speak: 'בעיה מילולית', input: 'number', answer: a + b };
+}
+function gWordSub(rng) {
+  var a = g3rnd(rng, 30, 99), b = g3rnd(rng, 5, a - 1);
+  var t = ['לאורי היו ' + a + ' שקלים והוא קנה ספר ב-' + b + ' שקלים. כמה נשאר לו?',
+    'בכיתה ' + a + ' תלמידים, ' + b + ' מהם יצאו להפסקה. כמה נשארו?',
+    'עדו קנה ספר ב-' + a + ' שקלים ואורי ב-' + b + '. בכמה יקר יותר הספר של עדו?'][g3rnd(rng, 0, 2)];
+  return { type: 'wordsub', prompt: t, speak: 'בעיה מילולית', input: 'number', answer: a - b };
+}
+function gWordMul(rng) {
+  var a = g3rnd(rng, 2, 10), b = g3rnd(rng, 2, 10);
+  var t = ['ב-' + a + ' סלים יש ' + b + ' תפוחים בכל אחד. כמה תפוחים בסך הכול?',
+    'ל-' + a + ' ילדים יש ' + b + ' בלונים לכל אחד. כמה בלונים יחד?'][g3rnd(rng, 0, 1)];
+  return { type: 'wordmul', prompt: t, speak: 'בעיה מילולית', input: 'number', answer: a * b };
+}
+function gWordDiv(rng) {
+  var b = g3rnd(rng, 2, 9), q = g3rnd(rng, 2, 9), tot = b * q;
+  var t = ['לאיתן ' + tot + ' מדבקות. הוא מדביק ' + b + ' בכל דף. לכמה דפים יזדקק?',
+    'חילקו ' + tot + ' עוגיות שווה בשווה ל-' + b + ' ילדים. כמה קיבל כל ילד?'][g3rnd(rng, 0, 1)];
+  return { type: 'worddiv', prompt: t, speak: 'בעיה מילולית', input: 'number', answer: q };
+}
+
+/* ---- geometry ---- */
+function gShapeSides(rng) {
+  var shapes = [['משולש', 3], ['ריבוע', 4], ['מלבן', 4], ['מחומש', 5], ['משושה', 6]], s = shapes[g3rnd(rng, 0, shapes.length - 1)];
+  return { type: 'shapeid', prompt: 'כמה צלעות יש ל' + s[0] + '?', speak: 'כמה צלעות יש ל' + s[0], input: 'number', answer: s[1] };
+}
+function gRectGeom(rng) {
+  var w = g3rnd(rng, 2, 6), h = g3rnd(rng, 2, 6), area = g3rnd(rng, 0, 1) === 1;
+  return { type: 'geom', prompt: (area ? 'מה שטח המלבן?' : 'מה היקף המלבן?') + ' (כל משבצת 1 ס"מ)', speak: area ? 'מה שטח המלבן' : 'מה היקף המלבן', visual: { kind: 'grid', w: w, h: h }, input: 'number', answer: area ? w * h : 2 * (w + h), unit: area ? 'סמ"ר' : 'ס"מ' };
+}
+
+/* ---- data / bar chart ---- */
+function gBarChart(rng) {
+  var cats = [['אדום', '🟥'], ['כחול', '🟦'], ['צהוב', '🟨']], vals = [g3rnd(rng, 1, 6), g3rnd(rng, 1, 6), g3rnd(rng, 1, 6)];
+  var visual = { kind: 'bars', cats: cats.map(function (c) { return c[1]; }), labels: cats.map(function (c) { return c[0]; }), vals: vals };
+  if (g3rnd(rng, 0, 1) === 0) return { type: 'chart', prompt: 'כמה בסך הכול לפי הגרף?', speak: 'כמה בסך הכול', visual: visual, input: 'number', answer: vals[0] + vals[1] + vals[2] };
+  var hi = 0; for (var i = 1; i < 3; i++) if (vals[i] > vals[hi]) hi = i;
+  var lo = 0; for (var j = 1; j < 3; j++) if (vals[j] < vals[lo]) lo = j;
+  return { type: 'chart', prompt: 'בכמה גדול ' + cats[hi][0] + ' מ' + cats[lo][0] + '?', speak: 'בכמה גדול', visual: visual, input: 'number', answer: vals[hi] - vals[lo] };
+}
+
+var G3_TOPICS = [
+  { key: 'numbers', label: 'מספרים', emoji: '🔢', gens: [gNumWords, gPredSucc, gCompare, gPlaceValue, gFormNumber] },
+  { key: 'sequences', label: 'סדרות', emoji: '➡️', gens: [gSequence] },
+  { key: 'numberline', label: 'ישר המספרים', emoji: '📏', gens: [gNumLineRead] },
+  { key: 'arithmetic', label: 'חשבון + − × :', emoji: '➗', gens: [gAdd, gSub, gMul, gDiv, gChain] },
+  { key: 'missing', label: 'מספר חסר', emoji: '❓', gens: [gMissAdd, gMissSub, gMissFactor, gMissDiv, gBalance] },
+  { key: 'word', label: 'בעיות מילוליות', emoji: '📖', gens: [gWordAdd, gWordSub, gWordMul, gWordDiv] },
+  { key: 'geometry', label: 'גאומטריה', emoji: '📐', gens: [gShapeSides, gRectGeom] },
+  { key: 'data', label: 'גרפים', emoji: '📊', gens: [gBarChart] }
+];
+function g3Topic(key) { for (var i = 0; i < G3_TOPICS.length; i++) if (G3_TOPICS[i].key === key) return G3_TOPICS[i]; return null; }
+function buildG3Question(key, rng) {
+  var gens;
+  if (key === 'mix') { gens = []; G3_TOPICS.forEach(function (t) { gens = gens.concat(t.gens); }); }
+  else { var t = g3Topic(key); if (!t) return null; gens = t.gens; }
+  var q = gens[g3rnd(rng, 0, gens.length - 1)](rng);
+  if (!q.input) q.input = 'number';
+  return q;
+}
+
 var ENGINE = {
   DAY: DAY,
   INTERVAL_DAYS: INTERVAL_DAYS,
@@ -558,7 +724,11 @@ var ENGINE = {
   WEEKLY_CHALLENGES: WEEKLY_CHALLENGES,
   loginRewardForDay: loginRewardForDay,
   pickWeeklyChallenge: pickWeeklyChallenge,
-  seasonalTheme: seasonalTheme
+  seasonalTheme: seasonalTheme,
+  hebrewNumberWords: hebrewNumberWords,
+  G3_TOPICS: G3_TOPICS,
+  g3Topic: g3Topic,
+  buildG3Question: buildG3Question
 };
 
 export { ENGINE };
