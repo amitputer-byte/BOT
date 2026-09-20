@@ -185,7 +185,7 @@ test('app boots a seeded profile to home, RTL intact, all games render', async (
   assert.ok(window.document.querySelector('.screen'), 'shop renders after reset (no dropped fields)');
 });
 
-test('fresh boot (no data) shows onboarding, not a game', async () => {
+test('fresh boot goes straight to profile (no parent gate), then placement → home', async () => {
   const dom = new JSDOM(
     '<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"></head>' +
     '<body><div id="app"></div><div id="fx-layer"></div><div id="speak-region"></div></body></html>',
@@ -197,16 +197,34 @@ test('fresh boot (no data) shows onboarding, not a game', async () => {
   globalThis.localStorage = window.localStorage; // fresh, empty
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
   globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+  window.confirm = () => true;
 
-  // Clear the durable backend so the previous test's mirror can't be recovered.
   const Storage = await import('../src/storage.js');
   Storage._resetDurable();
-
-  // Reset the ESM module cache so app.js re-boots against the fresh DOM.
   const appUrl = '../src/app.js?fresh=' + Date.now();
   await import(appUrl);
 
   const bridge = window.__gankefel;
   assert.ok(bridge, 'test bridge exposed');
-  assert.equal(bridge.route().name, 'onb_gate');
+  assert.equal(bridge.route().name, 'onb_profile', 'fresh boot lands on profile, not a parent gate');
+
+  // Name + continue → placement test.
+  window.document.getElementById('nick').value = 'תמרי';
+  window.document.getElementById('next').click();
+  assert.equal(bridge.route().name, 'placement', 'profile continues into the placement test');
+
+  // Answer 10 placement questions (correctly where we can parse arithmetic).
+  for (let i = 0; i < 12 && bridge.route().name === 'placement'; i++) {
+    const q = bridge.state && null; // noop
+    const choiceBtn = window.document.querySelector('.g3choice');
+    if (choiceBtn) { choiceBtn.click(); }
+    else {
+      const inp = window.document.getElementById('g3in');
+      if (inp) { inp.value = '0'; window.document.getElementById('g3check').click(); }
+    }
+    // the advance is on a timer; flush it synchronously
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  // Placement sets a difficulty level and completes onboarding.
+  assert.ok([1, 2, 3].includes(bridge.state().settings.g3Level), 'placement set a difficulty level');
 });

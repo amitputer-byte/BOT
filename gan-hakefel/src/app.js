@@ -10,6 +10,7 @@ import * as Storage from "./storage.js";
   'use strict';
   var E = ENGINE;
   var app = document.getElementById('app');
+  var APP_VERSION = '1.9.0';
 
   /* ---------- analytics taxonomy ---------- */
   var EV = {
@@ -510,13 +511,14 @@ import * as Storage from "./storage.js";
     if (!S.consentGiven) { return go('onb_gate'); }
     // Before baseline is done, only the baseline flow screens may run; anything
     // else funnels the child into the baseline intro.
-    if (!S.baselineDone && route.name !== 'session' && route.name !== 'celebrate') {
+    if (!S.baselineDone && route.name !== 'session' && route.name !== 'celebrate' && route.name !== 'placement') {
       return renderBaselineIntro();
     }
     switch (route.name) {
       case 'home': return renderHome();
       case 'session': return renderSessionRunner();
       case 'celebrate': return renderCelebration(route.params);
+      case 'placement': return renderPlacement();
       case 'daily_gift': return renderDailyGift();
       case 'game_arrays': return renderArraysGame();
       case 'game_train': return renderTrainGame();
@@ -625,6 +627,7 @@ import * as Storage from "./storage.js";
       var nick = document.getElementById('nick').value.trim();
       if (nick.length < 1) { document.getElementById('nickErr').textContent = 'צריך לבחור שם חיבה קצר'; return; }
       S.child.nickname = nick;
+      S.consentGiven = true; // local-only app; no separate consent gate
       if (!activeProfileId) {
         // First time for this child: create + activate the profile, then persist.
         var p = Storage.createProfile({ name: nick, avatar: S.child.avatar }, S);
@@ -633,7 +636,7 @@ import * as Storage from "./storage.js";
         Storage.updateProfile(activeProfileId, { name: nick, avatar: S.child.avatar });
       }
       save();
-      startBaseline();
+      go('placement');
     };
   }
 
@@ -1155,6 +1158,7 @@ import * as Storage from "./storage.js";
 
       '<div class="card"><div class="row between"><h3 style="margin:0">🗺️ המסע שלי</h3><button class="btn btn-soft btn-sm" id="toMap" style="width:auto">למפה</button></div>' +
       '<div class="map">' + familyNodes + '</div></div>' +
+      '<p class="muted center" style="font-size:12px;margin:6px 0 2px">גרסה ' + APP_VERSION + '</p>' +
       '</div>';
 
     document.getElementById('daily').onclick = function () { startSession('daily'); };
@@ -1767,6 +1771,7 @@ import * as Storage from "./storage.js";
       '<div class="seg" id="g3lvl">' +
       [[1, 'קל'], [2, 'בינוני'], [3, 'קשה']].map(function (o) { return '<button class="seg-btn' + ((S.settings.g3Level || 2) === o[0] ? ' on' : '') + '" data-lvl="' + o[0] + '">' + o[1] + '</button>'; }).join('') +
       '</div></div>' +
+      '<button class="btn btn-soft btn-sm" id="g3recal" style="width:auto;margin-bottom:6px">🎯 כיול רמה (10 שאלות)</button>' +
       '<div class="grid2">' + g3tiles +
       '<div class="tile" tabindex="0" role="button" id="wordtile"><span class="emoji">📖</span>בעיות מילוליות</div>' +
       '</div>' +
@@ -1777,6 +1782,7 @@ import * as Storage from "./storage.js";
     bindBtn('addv', function () { run = null; go('practice_add_v'); });
     bindBtn('wordtile', function () { run = null; go('practice_word'); });
     bindBtn('g3mix', function () { run = null; go('g3', { topic: 'mix' }); });
+    bindBtn('g3recal', function () { run = null; go('placement'); });
     Array.prototype.forEach.call(app.querySelectorAll('#g3lvl .seg-btn'), function (b) {
       b.onclick = function () { S.settings.g3Level = Number(b.getAttribute('data-lvl')); save(); render(); };
     });
@@ -2031,6 +2037,66 @@ import * as Storage from "./storage.js";
         }
       };
     });
+  }
+
+  /* ---- placement test: 10 quick questions to auto-set the practice level ---- */
+  function finishPlacement() {
+    var t = run.tier, lvl = (t[3] >= 2) ? 3 : (t[2] >= 2) ? 2 : 1, correct = run.correct;
+    S.settings.g3Level = lvl; S.baselineDone = true; S.consentGiven = true; save();
+    logEvent('placement_completed', { level: lvl, correct: correct });
+    var names = { 1: 'קל', 2: 'בינוני', 3: 'קשה' };
+    run = null;
+    go('celebrate', { title: '👑 מוכנים, ' + NAME() + '!', sub: 'ענית נכון על ' + correct + ' מתוך 10. התחלנו ברמת "' + names[lvl] + '" — אפשר לשנות בכל רגע במרכז התרגול.', earned: 0, then: 'home' });
+  }
+  function renderPlacement() {
+    if (!run || run.game !== 'placement') { run = { game: 'placement', i: 0, n: 10, levels: [1, 1, 1, 2, 2, 2, 2, 3, 3, 3], tier: { 1: 0, 2: 0, 3: 0 }, correct: 0 }; logEvent('placement_started', {}); }
+    if (run.i >= run.n) return finishPlacement();
+    var lvl = run.levels[run.i];
+    if (!run.q || run.qIdx !== run.i) { run.q = E.buildG3Question('mix', Math.random, lvl); run.qIdx = run.i; }
+    var q = run.q;
+    var pct = Math.round(run.i / run.n * 100);
+    var body;
+    if (q.input === 'choice') {
+      body = '<div class="choices" id="choices">' + q.choices.map(function (v) { return '<button class="choice g3choice" data-v="' + escapeHtml(String(v)) + '"><span class="num">' + escapeHtml(String(v)) + '</span></button>'; }).join('') + '</div>';
+    } else {
+      body = '<div class="g3answer"><input class="input g3in" id="g3in" inputmode="numeric" autocomplete="off" aria-label="תשובה"' + (q.unit ? ' style="max-width:120px"' : '') + '>' + (q.unit ? '<span class="g3unitlbl">' + q.unit + '</span>' : '') +
+        '<button class="btn btn-primary btn-sm" id="g3check" style="width:auto">הבא</button></div>';
+    }
+    app.innerHTML = '<div class="screen">' + FOX() +
+      '<div class="card center">' +
+      '<h3 style="margin:2px 0">מבחן היכרות קצר 👋</h3>' +
+      '<p class="muted">כמה שאלות כדי להתאים לך את הרמה — אין טעויות, פשוט נסי!</p>' +
+      '<div class="progress"><i style="width:' + Math.max(4, pct) + '%"></i></div>' +
+      '<p class="muted">שאלה ' + (run.i + 1) + ' מתוך ' + run.n + '</p>' +
+      '<h3 style="line-height:1.6">' + q.prompt + '</h3>' +
+      g3VisualHTML(q.visual) +
+      body +
+      '<div class="feedback" id="fb"></div>' +
+      '<button class="btn btn-soft btn-sm" id="say" style="width:auto;margin-top:8px">🔊 שמע</button>' +
+      '</div></div>';
+    if (q.speak) speak(q.speak);
+    bindBtn('say', function () { if (q.speak) speak(q.speak); });
+    function record(ok) {
+      if (ok) { run.tier[lvl]++; run.correct++; FX.sfx('correct'); } else { FX.sfx('tick'); }
+      var fb = document.getElementById('fb'); fb.className = 'feedback ' + (ok ? 'good' : 'muted'); fb.textContent = ok ? cheer(CHAMP.success) : 'סבבה, ממשיכים!';
+      FX.addTimer(setTimeout(function () { run.i++; render(); }, 550));
+    }
+    if (q.input === 'choice') {
+      var answered = false;
+      Array.prototype.forEach.call(app.querySelectorAll('.g3choice'), function (bn) {
+        bn.onclick = function () { if (answered) return; answered = true; record(String(bn.getAttribute('data-v')) === String(q.answer)); };
+      });
+    } else {
+      var done = false;
+      var next = function () {
+        if (done) return;
+        var el = document.getElementById('g3in'); var val = (el && el.value || '').trim();
+        if (val === '') { var fb = document.getElementById('fb'); fb.className = 'feedback muted'; fb.textContent = 'כתבי תשובה, או נחשי 🙂'; return; }
+        done = true; record(Number(val) === Number(q.answer));
+      };
+      bindBtn('g3check', next);
+      var inp = document.getElementById('g3in'); if (inp) { inp.focus(); inp.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); next(); } }; }
+    }
   }
 
   /* ============================== TOY SHOP (pets · garden · style) + CHESTS ============================== */
@@ -2643,6 +2709,7 @@ import * as Storage from "./storage.js";
       '<div class="btn-row"><button class="btn btn-soft btn-sm" id="reset">איפוס התקדמות</button>' +
       '<button class="btn btn-soft btn-sm" id="delete" style="color:var(--bad)">מחיקת כל הנתונים</button></div>' +
       '<div class="err-text" id="msg"></div></div>' +
+      '<p class="muted center" style="margin-top:8px">גן הכפל · גרסה ' + APP_VERSION + '</p>' +
       '</div>';
 
     document.getElementById('back').onclick = function () { go('parent_dash'); };
@@ -2808,9 +2875,9 @@ import * as Storage from "./storage.js";
       if (S.consentGiven && S.baselineDone && checkLogin()) { go('daily_gift'); }
       else { go(S.consentGiven ? 'home' : 'onb_gate'); }
     } else if (profiles.length === 0) {
-      // Fresh install: onboarding will create the first profile.
+      // Fresh install: go straight to profile creation (no parent gate up front).
       activeProfileId = null; S = freshState();
-      go('onb_gate');
+      go('onb_profile');
     } else {
       // Profiles exist but none is active: show the profile picker.
       activeProfileId = null; S = freshState();
