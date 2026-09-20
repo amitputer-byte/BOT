@@ -601,6 +601,17 @@ function gEvenOdd(rng, lv) {
   var n = g3rnd(rng, 2, g3lv(lv, 50, 200, 999));
   return { type: 'evenodd', prompt: 'האם ' + n + ' זוגי או אי-זוגי?', speak: 'האם ' + n + ' זוגי או אי זוגי', input: 'choice', choices: ['זוגי', 'אי-זוגי'], answer: n % 2 === 0 ? 'זוגי' : 'אי-זוגי' };
 }
+function gMissDigitCompare(rng, lv) {
+  // Fill the missing tens digit so the inequality holds; asked as the largest /
+  // smallest digit that fits, so the answer is unique. (Worksheet Q2.)
+  var u = g3rnd(rng, 0, 9), d = g3rnd(rng, 1, 8);
+  if (g3rnd(rng, 0, 1) === 0) {
+    var N = d * 10 + u + g3rnd(rng, 1, 10); // d0..d9 boundary → largest fitting tens digit is d
+    return { type: 'missdigit', prompt: 'מהי הספרה הגדולה ביותר שמתאימה?   ⬚' + u + ' < ' + N, speak: 'מהי הספרה הגדולה ביותר שמתאימה', input: 'number', answer: d };
+  }
+  var d2 = g3rnd(rng, 1, 9), N2 = d2 * 10 + u - g3rnd(rng, 1, 10);
+  return { type: 'missdigit', prompt: 'מהי הספרה הקטנה ביותר שמתאימה?   ⬚' + u + ' > ' + N2, speak: 'מהי הספרה הקטנה ביותר שמתאימה', input: 'number', answer: d2 };
+}
 
 /* ---- sequences ---- */
 function gSequence(rng, lv) {
@@ -748,7 +759,7 @@ function gPictograph(rng, lv) {
 }
 
 var G3_TOPICS = [
-  { key: 'numbers', label: 'מספרים', emoji: '🔢', gens: [gNumWords, gWordsToNum, gPredSucc, gCompare, gPlaceValue, gExpandedForm, gFormNumber, gRound, gEvenOdd] },
+  { key: 'numbers', label: 'מספרים', emoji: '🔢', gens: [gNumWords, gWordsToNum, gPredSucc, gCompare, gMissDigitCompare, gPlaceValue, gExpandedForm, gFormNumber, gRound, gEvenOdd] },
   { key: 'sequences', label: 'סדרות', emoji: '➡️', gens: [gSequence, gSeqRule] },
   { key: 'numberline', label: 'ישר המספרים', emoji: '📏', gens: [gNumLineRead, gNumLineApprox] },
   { key: 'arithmetic', label: 'חשבון + − × :', emoji: '➗', gens: [gAdd, gSub, gMul, gDiv, gChain, gTwoStep, gMulTenHundred] },

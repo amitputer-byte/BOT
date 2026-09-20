@@ -10,7 +10,7 @@ import * as Storage from "./storage.js";
   'use strict';
   var E = ENGINE;
   var app = document.getElementById('app');
-  var APP_VERSION = '1.9.0';
+  var APP_VERSION = '1.9.1';
 
   /* ---------- analytics taxonomy ---------- */
   var EV = {
